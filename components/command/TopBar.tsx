@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Pause, Play, RotateCcw, Gauge, Bell, ChevronDown, Search, HelpCircle } from "lucide-react";
+import { Pause, Play, RotateCcw, Gauge, Bell, ChevronDown, Search, HelpCircle, BookOpen } from "lucide-react";
 import { useSim } from "@/store/sim";
 import { useUi } from "@/store/ui";
 import { useQuality, type QualityTier } from "@/store/quality";
@@ -111,6 +111,9 @@ export function TopBar() {
           <Search size={13} />
           Search
           <Kbd>⌘K</Kbd>
+        </button>
+        <button onClick={() => useUi.getState().openMethodology("pricing")} className="grid h-8 w-8 place-items-center rounded-md text-low hover:bg-white/5 hover:text-hi" aria-label="Methodology" title="How every number is calculated">
+          <BookOpen size={14} />
         </button>
         <button onClick={() => useUi.getState().setHelp(true)} className="grid h-8 w-8 place-items-center rounded-md text-low hover:bg-white/5 hover:text-hi" aria-label="Keyboard shortcuts">
           <HelpCircle size={14} />

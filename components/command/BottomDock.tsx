@@ -6,6 +6,7 @@ import { useSim } from "@/store/sim";
 import { useTwin, type Selection } from "@/store/twin";
 import { useTrace } from "@/store/trace";
 import { useDirector } from "@/store/director";
+import { useUi } from "@/store/ui";
 import { getModel } from "@/lib/architecture/model";
 import { moduleMeta } from "@/lib/intelligence/registry";
 import { sampleServedRoom } from "@/lib/twin/trace";
@@ -46,7 +47,11 @@ function RecCard({ rec }: { rec: Recommendation }) {
       style={{ borderLeftColor: meta.color, borderLeftWidth: 2 }}
     >
       <div className="flex items-center justify-between">
-        <Tag color={meta.color}>{meta.short}</Tag>
+        <button onClick={() => useUi.getState().openMethodology(rec.module)} title="How this number is calculated">
+          <Tag color={meta.color} className="cursor-pointer hover:brightness-125">
+            {meta.short}
+          </Tag>
+        </button>
         <div className="mono flex items-center gap-2 text-[10px] text-low">
           <span title="Model confidence">conf {rec.confidence.toFixed(2)}</span>
           <span>{fmtClock(rec.createdAt)}</span>
