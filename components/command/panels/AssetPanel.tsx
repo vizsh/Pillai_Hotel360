@@ -60,7 +60,7 @@ export function AssetPanel({ id }: { id: string }) {
         <Meter value={risk} color={color} className="mt-3" />
         <div className="mt-2 flex items-center justify-between">
           <span className="text-[10.5px] text-low">Weibull hazard (k, λ by asset class) × telemetry anomaly</span>
-          <Provenance kind="modeled" />
+          <Provenance kind="modeled" module="maintenance" />
         </div>
         {risk > 0.25 && occ > 0 && (
           <Button

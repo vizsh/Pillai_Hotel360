@@ -41,7 +41,7 @@ export function SentimentPage() {
       </div>
 
       <div className="grid grid-cols-3 gap-4">
-        <Card title="Aspect scores · trailing 7 days" right={<Provenance kind="derived" />} className="col-span-2">
+        <Card title="Aspect scores · trailing 7 days" right={<Provenance kind="derived" module="sentiment" />} className="col-span-2">
           <ResponsiveContainer width="100%" height={260}>
             <BarChart data={summary.map((a) => ({ aspect: a.aspect, score: +a.score.toFixed(2), mentions: a.mentions }))} layout="vertical" barCategoryGap={6}>
               <CartesianGrid stroke={chartTheme.grid} strokeDasharray="2 4" horizontal={false} />

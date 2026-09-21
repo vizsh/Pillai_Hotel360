@@ -30,7 +30,7 @@ export function ZonePanel({ id }: { id: string }) {
         </p>
       </header>
       {isStore ? (
-        <Section title="Inventory" right={<Provenance kind="modeled" />}>
+        <Section title="Inventory" right={<Provenance kind="modeled" module="inventory" />}>
           <div className="flex flex-col gap-1.5">
             {items.map((it) => {
               const a = assessInventory(it, occFactor);

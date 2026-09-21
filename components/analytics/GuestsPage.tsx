@@ -40,7 +40,7 @@ export function GuestsPage() {
       </div>
 
       <div className="grid grid-cols-3 gap-4">
-        <Card title="Segments · spend/night vs lead time" right={<Provenance kind="modeled" />} className="col-span-2">
+        <Card title="Segments · spend/night vs lead time" right={<Provenance kind="modeled" module="segmentation" />} className="col-span-2">
           <ResponsiveContainer width="100%" height={320}>
             <ScatterChart>
               <CartesianGrid stroke={chartTheme.grid} strokeDasharray="2 4" />

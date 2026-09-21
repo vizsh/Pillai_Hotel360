@@ -56,7 +56,7 @@ export function EnergyPage() {
         <Stat label="Saved today" value={`₹${Math.round(savedToday * COST_PER_KWH).toLocaleString("en-IN")}`} sub={`${savedToday.toFixed(1)} kWh`} accent="var(--accent)" />
       </div>
 
-      <Card title="Recommendations" right={<Provenance kind="modeled" />}>
+      <Card title="Recommendations" right={<Provenance kind="modeled" module="energy" />}>
         {anyPending ? (
           <div className="flex flex-col">
             <RecRow rec={vacantRec} model={model} mutate={mutate} />
@@ -106,7 +106,7 @@ export function EnergyPage() {
           )}
         </Card>
 
-        <Card title={`Occupied, guest away · CCTV (${a.awayCandidates.length})`} right={<Provenance />}>
+        <Card title={`Occupied, guest away · CCTV (${a.awayCandidates.length})`} right={<Provenance module="energy" />}>
           {a.awayCandidates.length === 0 ? (
             <p className="text-[12px] text-low">No checked-in room currently reads as empty on camera.</p>
           ) : (

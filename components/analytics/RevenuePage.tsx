@@ -37,7 +37,7 @@ export function RevenuePage() {
       </div>
 
       <div className="grid grid-cols-3 gap-4">
-        <Card title="RevPAR optimisation curve" right={<Provenance kind="modeled" />} className="col-span-2">
+        <Card title="RevPAR optimisation curve" right={<Provenance kind="modeled" module="pricing" />} className="col-span-2">
           <ResponsiveContainer width="100%" height={280}>
             <LineChart data={p.curve.map((c) => ({ mult: c.mult, revpar: Math.round(c.revpar), occ: +(c.occ * 100).toFixed(1) }))}>
               <CartesianGrid stroke={chartTheme.grid} strokeDasharray="2 4" />
@@ -82,7 +82,7 @@ export function RevenuePage() {
       </div>
 
       {segRates.length > 0 && (
-        <Card title="Pricing by segment" right={<Provenance kind="modeled" />}>
+        <Card title="Pricing by segment" right={<Provenance kind="modeled" module="pricing" />}>
           <p className="mb-3 text-[11.5px] text-mid">
             What each guest segment&apos;s own price sensitivity would support, holding today&rsquo;s seasonality and competitor index fixed. The blended elasticity above (
             {p.inputs.elasticity.toFixed(2)}) is these segments weighted by in-house guest count — segmentation output drives the resort-wide rate, not just this table.

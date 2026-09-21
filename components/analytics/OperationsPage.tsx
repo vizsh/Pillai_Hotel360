@@ -36,7 +36,7 @@ export function OperationsPage() {
       </div>
 
       <div className="grid grid-cols-3 gap-4">
-        <Card title="Demand forecast · next 24h (staff required)" right={<Provenance kind="modeled" />} className="col-span-2">
+        <Card title="Demand forecast · next 24h (staff required)" right={<Provenance kind="modeled" module="staffing" />} className="col-span-2">
           <ResponsiveContainer width="100%" height={260}>
             <AreaChart data={demand.map((d) => ({ h: `${String(d.hour).padStart(2, "0")}:00`, ...d.demand }))}>
               <CartesianGrid stroke={chartTheme.grid} strokeDasharray="2 4" />

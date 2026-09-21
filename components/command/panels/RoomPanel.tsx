@@ -69,7 +69,7 @@ export function RoomPanel({ id }: { id: string }) {
       )}
 
       {g ? (
-        <Section title="In-house guest" right={<Provenance />}>
+        <Section title="In-house guest" right={<Provenance module="sentiment" />}>
           <div className="rounded-lg border border-stroke bg-white/[0.02] p-3">
             <div className="flex items-center justify-between">
               <div>

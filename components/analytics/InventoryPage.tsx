@@ -40,7 +40,7 @@ export function InventoryPage() {
       </div>
 
       <div className="grid grid-cols-3 gap-4">
-        <Card title={`7-day projection · ${cur.it.name}`} right={<Provenance kind="modeled" />} className="col-span-2">
+        <Card title={`7-day projection · ${cur.it.name}`} right={<Provenance kind="modeled" module="inventory" />} className="col-span-2">
           <ResponsiveContainer width="100%" height={240}>
             <LineChart data={proj}>
               <CartesianGrid stroke={chartTheme.grid} strokeDasharray="2 4" />
