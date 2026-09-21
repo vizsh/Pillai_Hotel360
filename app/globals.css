@@ -1,0 +1,106 @@
+@import "tailwindcss";
+
+:root {
+  --bg-void: #05070a;
+  --bg-deep: #0a0e14;
+  --bg-panel: #101620;
+  --stroke: #1c2532;
+  --stroke-lit: #2a3647;
+
+  --text-hi: #e8edf4;
+  --text-mid: #9aa7b8;
+  --text-low: #5b6879;
+
+  --accent: #2dd4bf;
+  --accent-glow: #5eead4;
+  --warm: #f5a524;
+  --critical: #f4436c;
+  --positive: #34d399;
+}
+
+@theme inline {
+  --color-void: var(--bg-void);
+  --color-deep: var(--bg-deep);
+  --color-panel: var(--bg-panel);
+  --color-stroke: var(--stroke);
+  --color-stroke-lit: var(--stroke-lit);
+  --color-hi: var(--text-hi);
+  --color-mid: var(--text-mid);
+  --color-low: var(--text-low);
+  --color-accent: var(--accent);
+  --color-accent-glow: var(--accent-glow);
+  --color-warm: var(--warm);
+  --color-critical: var(--critical);
+  --color-positive: var(--positive);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --font-display: var(--font-display);
+}
+
+html,
+body {
+  height: 100%;
+  background: var(--bg-void);
+  color: var(--text-hi);
+  font-family: var(--font-geist-sans), system-ui, sans-serif;
+  color-scheme: dark;
+  overflow: hidden;
+}
+
+* {
+  border-color: var(--stroke);
+}
+
+.glass {
+  background: rgba(16, 22, 32, 0.72);
+  backdrop-filter: blur(20px) saturate(1.2);
+  -webkit-backdrop-filter: blur(20px) saturate(1.2);
+  border: 1px solid var(--stroke);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 24px 64px -24px rgba(0, 0, 0, 0.9);
+  border-radius: 14px;
+}
+
+.label {
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-low);
+}
+
+.mono {
+  font-family: var(--font-geist-mono), monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+.scrollbar-thin::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: var(--stroke-lit);
+  border-radius: 3px;
+}
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+@keyframes pulse-ring {
+  0% {
+    transform: scale(0.8);
+    opacity: 0.9;
+  }
+  100% {
+    transform: scale(2.2);
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .glass {
+    background: var(--bg-panel);
+    backdrop-filter: none;
+  }
+}
