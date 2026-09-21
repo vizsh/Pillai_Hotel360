@@ -66,13 +66,19 @@ export function Lighting() {
       />
       <directionalLight ref={rim} position={[70, 40, 60]} intensity={0.35} color="#2dd4bf" />
       <pointLight position={[0, 8, -55]} intensity={40} color="#0fb7d6" distance={60} decay={2} />
-      <Environment resolution={256} frames={1} environmentIntensity={0.9}>
+      {/* Procedural — not a fetched HDRI. Keeps the twin fully self-contained (no runtime
+          CDN dependency to fail on unreliable venue wifi mid-demo) while still giving the
+          glass/metal materials real reflections to catch. A couple more formers than
+          before, at a higher resolution, for richer variation across the curtain wall. */}
+      <Environment resolution={384} frames={1} environmentIntensity={0.9}>
         <color attach="background" args={["#070b12"]} />
         <Lightformer form="rect" intensity={3} color="#cfe3ff" position={[0, 40, -60]} scale={[80, 20, 1]} target={[0, 0, 0]} />
         <Lightformer form="rect" intensity={1.2} color="#2dd4bf" position={[60, 10, 30]} scale={[30, 12, 1]} target={[0, 0, 0]} />
         <Lightformer form="rect" intensity={0.8} color="#f5a524" position={[-60, 6, 30]} scale={[20, 8, 1]} target={[0, 0, 0]} />
         <Lightformer form="ring" intensity={1.5} color="#8fb8ff" position={[0, 80, 0]} scale={[40, 40, 1]} rotation-x={Math.PI / 2} />
         <Lightformer form="rect" intensity={0.5} color="#04365a" position={[0, -20, 0]} scale={[200, 200, 1]} rotation-x={-Math.PI / 2} />
+        <Lightformer form="rect" intensity={0.9} color="#ffe8c4" position={[-40, 22, -40]} scale={[24, 10, 1]} target={[0, 0, 0]} />
+        <Lightformer form="circle" intensity={0.6} color="#9fd8ff" position={[40, 50, 40]} scale={[18, 18, 1]} target={[0, 0, 0]} />
       </Environment>
     </>
   );

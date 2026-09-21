@@ -52,7 +52,16 @@ export function lookForSelection(sel: Selection, viewMode: ViewMode, isolatedFlo
     const y = r.center[1] + yOff(r.floor);
     if (viewMode === "room") {
       const f = r.facing;
-      return [r.center[0] - r.w * 0.28, y + 1.65, r.center[2] - f * (r.d / 2 - 0.6), r.center[0] + r.w * 0.1, y + 1.3, r.center[2] + f * r.d * 0.6];
+      // Inset from the back (exterior) wall by enough to clear the camera's 0.5-unit near
+      // clip plane with margin — at the old 0.6 inset, a room a little smaller than
+      // average (or furniture placed hard against that wall) could put the wall itself
+      // inside the near plane, which reads as a blank/grey frame since everything in front
+      // of it gets clipped away.
+      const wallClearance = Math.min(r.d * 0.32, 1.8);
+      // Target sits low (near furniture height, not eye height) so the shot pitches down
+      // across the bed/desk instead of skimming the ceiling — a level target at this
+      // camera distance mostly framed the back wall.
+      return [r.center[0] - r.w * 0.28, y + 1.65, r.center[2] - f * (r.d / 2 - wallClearance), r.center[0] + r.w * 0.1, y + 0.55, r.center[2] + f * r.d * 0.45];
     }
     if (viewMode === "isolate" && isolatedFloor === r.floor) return [r.center[0] + 10, y + 16, r.center[2] - r.facing * 14, r.center[0], y + 1, r.center[2]];
     return [r.center[0] + 10, y + 12, r.center[2] + r.facing * 30, r.center[0], y + 1, r.center[2]];
