@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { Pause, Play, RotateCcw, Gauge, Bell, ChevronDown, Search, HelpCircle, BookOpen } from "lucide-react";
+import { Pause, Play, RotateCcw, Gauge, Bell, ChevronDown, Search, HelpCircle, BookOpen, Compass } from "lucide-react";
 import { useSim } from "@/store/sim";
 import { useUi } from "@/store/ui";
+import { useOnboarding } from "@/store/onboarding";
 import { useQuality, type QualityTier } from "@/store/quality";
 import { fmtClock } from "@/lib/sim/engine";
 import type { Scenario } from "@/lib/sim/types";
@@ -111,6 +112,9 @@ export function TopBar() {
           <Search size={13} />
           Search
           <Kbd>⌘K</Kbd>
+        </button>
+        <button onClick={() => useOnboarding.getState().start()} className="grid h-8 w-8 place-items-center rounded-md text-low hover:bg-white/5 hover:text-hi" aria-label="Replay intro" title="Replay intro">
+          <Compass size={14} />
         </button>
         <button onClick={() => useUi.getState().openMethodology("pricing")} className="grid h-8 w-8 place-items-center rounded-md text-low hover:bg-white/5 hover:text-hi" aria-label="Methodology" title="How every number is calculated">
           <BookOpen size={14} />

@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { subscribeWithSelector } from "zustand/middleware";
 import type { ModuleId } from "@/lib/sim/types";
 
 type MobilePanel = "none" | "left" | "right" | "dock";
@@ -17,16 +18,18 @@ interface UiStore {
   closeMethodology: () => void;
 }
 
-export const useUi = create<UiStore>((set) => ({
-  twinReady: false,
-  paletteOpen: false,
-  helpOpen: false,
-  mobilePanel: "none",
-  methodologyModule: null,
-  setTwinReady: (twinReady) => set({ twinReady }),
-  setPalette: (paletteOpen) => set({ paletteOpen }),
-  setHelp: (helpOpen) => set({ helpOpen }),
-  setMobilePanel: (mobilePanel) => set((s) => ({ mobilePanel: s.mobilePanel === mobilePanel ? "none" : mobilePanel })),
-  openMethodology: (methodologyModule) => set({ methodologyModule }),
-  closeMethodology: () => set({ methodologyModule: null }),
-}));
+export const useUi = create<UiStore>()(
+  subscribeWithSelector((set) => ({
+    twinReady: false,
+    paletteOpen: false,
+    helpOpen: false,
+    mobilePanel: "none",
+    methodologyModule: null,
+    setTwinReady: (twinReady) => set({ twinReady }),
+    setPalette: (paletteOpen) => set({ paletteOpen }),
+    setHelp: (helpOpen) => set({ helpOpen }),
+    setMobilePanel: (mobilePanel) => set((s) => ({ mobilePanel: s.mobilePanel === mobilePanel ? "none" : mobilePanel })),
+    openMethodology: (methodologyModule) => set({ methodologyModule }),
+    closeMethodology: () => set({ methodologyModule: null }),
+  })),
+);
