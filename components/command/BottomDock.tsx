@@ -10,7 +10,7 @@ import { useUi } from "@/store/ui";
 import { getModel } from "@/lib/architecture/model";
 import { moduleMeta } from "@/lib/intelligence/registry";
 import { sampleServedRoom } from "@/lib/twin/trace";
-import { executeRecommendation, dismissRecommendation } from "@/lib/sim/actions";
+import { acceptRecommendation, dismissRecommendationLogged } from "@/lib/api/recommendationActions";
 import { fmtClock, resolveAlert } from "@/lib/sim/engine";
 import type { Recommendation } from "@/lib/sim/types";
 import { Button, Tag, sevColor } from "@/components/ui/primitives";
@@ -76,10 +76,10 @@ function RecCard({ rec }: { rec: Recommendation }) {
       <div className="mt-3 flex items-center gap-1.5">
         {rec.status === "pending" ? (
           <>
-            <Button size="sm" variant="primary" onClick={() => mutate((s) => executeRecommendation(s, model, s.recommendations[rec.id]))}>
+            <Button size="sm" variant="primary" onClick={() => acceptRecommendation(mutate, model, rec)}>
               <Check size={12} /> Accept
             </Button>
-            <Button size="sm" variant="ghost" onClick={() => mutate((s) => dismissRecommendation(s, s.recommendations[rec.id]))}>
+            <Button size="sm" variant="ghost" onClick={() => dismissRecommendationLogged(mutate, rec)}>
               <X size={12} /> Dismiss
             </Button>
             {rec.module === "maintenance" && rec.targetKind === "asset" && (

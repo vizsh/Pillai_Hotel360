@@ -11,6 +11,10 @@ interface SimStore {
   setSpeed: (speed: number) => void;
   setPaused: (paused: boolean) => void;
   mutate: (fn: (s: SimState) => void) => void;
+  /** Replaces the live state wholesale with one restored from a persisted snapshot
+   * (lib/api/backend.ts's fetchLatestSnapshot) — distinct from reset(), which reseeds
+   * fresh rather than restoring exact prior state. */
+  restoreState: (state: SimState) => void;
   bump: () => void;
 }
 
@@ -32,6 +36,7 @@ export const useSim = create<SimStore>()(
       fn(get().state);
       set({ version: get().version + 1 });
     },
+    restoreState: (state) => set({ state, version: get().version + 1 }),
     bump: () => set({ version: get().version + 1 }),
   })),
 );

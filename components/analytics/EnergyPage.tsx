@@ -6,7 +6,7 @@ import { useSim } from "@/store/sim";
 import { useTwin } from "@/store/twin";
 import { getModel } from "@/lib/architecture/model";
 import { assessEnergyWaste } from "@/lib/intelligence/energy";
-import { executeRecommendation, dismissRecommendation } from "@/lib/sim/actions";
+import { acceptRecommendation, dismissRecommendationLogged } from "@/lib/api/recommendationActions";
 import type { Recommendation } from "@/lib/sim/types";
 import { AnalyticsShell, Card } from "./AnalyticsShell";
 import { Button, Provenance, Stat, Tag } from "@/components/ui/primitives";
@@ -24,10 +24,10 @@ function RecRow({ rec, model, mutate }: { rec: Recommendation | undefined; model
         <p className="mt-1.5 text-[11.5px] text-accent/90">{pending.impact}</p>
       </div>
       <div className="flex shrink-0 items-center gap-1.5">
-        <Button size="sm" variant="primary" onClick={() => mutate((s) => executeRecommendation(s, model, s.recommendations[pending.id]))}>
+        <Button size="sm" variant="primary" onClick={() => acceptRecommendation(mutate, model, pending)}>
           Accept
         </Button>
-        <Button size="sm" variant="ghost" onClick={() => mutate((s) => dismissRecommendation(s, s.recommendations[pending.id]))}>
+        <Button size="sm" variant="ghost" onClick={() => dismissRecommendationLogged(mutate, pending)}>
           Dismiss
         </Button>
       </div>

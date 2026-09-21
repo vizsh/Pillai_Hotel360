@@ -42,3 +42,6 @@ next-env.d.ts
 
 # local Claude Code skill bundle (tooling, not project source)
 .claude/skills/
+
+# sqlite persistence (runtime data, not source)
+/data/

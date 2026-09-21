@@ -4,7 +4,7 @@ import { Area, AreaChart, CartesianGrid, Line, LineChart, ReferenceLine, Respons
 import { useSim } from "@/store/sim";
 import { getModel } from "@/lib/architecture/model";
 import { computePricing, computeSegmentPricing } from "@/lib/intelligence/pricing";
-import { executeRecommendation } from "@/lib/sim/actions";
+import { acceptRecommendation } from "@/lib/api/recommendationActions";
 import { AnalyticsShell, Card, chartTheme } from "./AnalyticsShell";
 import { Button, Provenance, Stat, Tag } from "@/components/ui/primitives";
 import { cn, fmtINR, fmtPct } from "@/lib/utils";
@@ -71,7 +71,7 @@ export function RevenuePage() {
               <div className="flex justify-between"><span>event uplift</span><span className="text-hi">+{(p.inputs.eventUplift * 100).toFixed(0)}%</span></div>
             </div>
             {rec?.status === "pending" ? (
-              <Button variant="primary" onClick={() => mutate((s) => executeRecommendation(s, model, s.recommendations[rec.id]))}>
+              <Button variant="primary" onClick={() => acceptRecommendation(mutate, model, rec)}>
                 Apply {p.recommendedMultiplier.toFixed(2)}× to unsold inventory
               </Button>
             ) : (
@@ -84,7 +84,7 @@ export function RevenuePage() {
       {segRates.length > 0 && (
         <Card title="Pricing by segment" right={<Provenance kind="modeled" />}>
           <p className="mb-3 text-[11.5px] text-mid">
-            What each guest segment's own price sensitivity would support, holding today&rsquo;s seasonality and competitor index fixed. The blended elasticity above (
+            What each guest segment&apos;s own price sensitivity would support, holding today&rsquo;s seasonality and competitor index fixed. The blended elasticity above (
             {p.inputs.elasticity.toFixed(2)}) is these segments weighted by in-house guest count — segmentation output drives the resort-wide rate, not just this table.
           </p>
           <table className="w-full text-[12px]">

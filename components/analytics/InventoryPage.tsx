@@ -4,7 +4,7 @@ import { Bar, BarChart, CartesianGrid, Line, LineChart, ReferenceLine, Responsiv
 import { useSim } from "@/store/sim";
 import { getModel } from "@/lib/architecture/model";
 import { assessInventory } from "@/lib/intelligence/inventory";
-import { executeRecommendation } from "@/lib/sim/actions";
+import { acceptRecommendation } from "@/lib/api/recommendationActions";
 import { AnalyticsShell, Card, chartTheme } from "./AnalyticsShell";
 import { Button, Meter, Provenance, Stat, Tag } from "@/components/ui/primitives";
 import { cn, fmtINR } from "@/lib/utils";
@@ -110,7 +110,7 @@ export function InventoryPage() {
                   <td className="py-2 text-mid">{it.onOrder ? `${it.onOrder} · ${Math.max(0, Math.ceil(((it.orderEta ?? 0) - state.t) / 1440))}d` : "—"}</td>
                   <td className="py-2 text-right">
                     {rec?.status === "pending" && (
-                      <Button size="sm" variant="primary" onClick={(e) => { e.stopPropagation(); mutate((s) => executeRecommendation(s, model, s.recommendations[rec.id])); }}>
+                      <Button size="sm" variant="primary" onClick={(e) => { e.stopPropagation(); acceptRecommendation(mutate, model, rec); }}>
                         Order {rec.payload?.qty as number}
                       </Button>
                     )}

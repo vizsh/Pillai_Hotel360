@@ -20,6 +20,7 @@ export const routes = [
   { href: "/sentiment", label: "Sentiment" },
   { href: "/concierge", label: "Concierge" },
   { href: "/integrations", label: "Integrations" },
+  { href: "/history", label: "History" },
 ];
 
 export function AnalyticsShell({ title, subtitle, children }: { title: string; subtitle: string; children: React.ReactNode }) {

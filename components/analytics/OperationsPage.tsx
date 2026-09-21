@@ -6,7 +6,7 @@ import { useTwin } from "@/store/twin";
 import { getModel } from "@/lib/architecture/model";
 import { depts, forecastDemand, solveRoster } from "@/lib/intelligence/staffing";
 import { deptColors } from "@/lib/twin/colors";
-import { executeRecommendation } from "@/lib/sim/actions";
+import { acceptRecommendation } from "@/lib/api/recommendationActions";
 import { fmtClock } from "@/lib/sim/engine";
 import { AnalyticsShell, Card, chartTheme } from "./AnalyticsShell";
 import { Button, Provenance, Stat, Tag } from "@/components/ui/primitives";
@@ -65,7 +65,7 @@ export function OperationsPage() {
                 <div key={r.id} className="rounded-lg border border-warm/40 bg-warm/5 p-3">
                   <div className="text-[12.5px] text-hi">{r.title}</div>
                   <p className="mt-1 text-[11px] text-mid">{r.impact}</p>
-                  <Button size="sm" variant="primary" className="mt-2" onClick={() => mutate((s) => executeRecommendation(s, model, s.recommendations[r.id]))}>
+                  <Button size="sm" variant="primary" className="mt-2" onClick={() => acceptRecommendation(mutate, model, r)}>
                     Call in {r.payload?.count as number}
                   </Button>
                 </div>
