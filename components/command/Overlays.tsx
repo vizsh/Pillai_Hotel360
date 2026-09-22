@@ -75,6 +75,10 @@ export function Palette() {
 
   useEffect(() => {
     if (open) {
+      // Resetting local state when a prop/store value changes (here, the palette opening)
+      // is one of React's own documented legitimate effect uses — not the "derived state"
+      // anti-pattern the set-state-in-effect rule is meant to catch.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setQ("");
       setIdx(0);
       setTimeout(() => input.current?.focus(), 10);

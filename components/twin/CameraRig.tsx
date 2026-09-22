@@ -81,14 +81,19 @@ export function lookForSelection(sel: Selection, viewMode: ViewMode, isolatedFlo
     return [z.center[0] + 18, y + 22, z.center[2] - 24, z.center[0], y + 1, z.center[2]];
   }
   if (sel.kind === "staff") {
-    const s = useTwinStaffPos(sel.id);
+    const s = getTwinStaffPos(sel.id);
     if (!s) return null;
     return [s[0] + 8, s[1] + 7 + yOff(s[3]), s[2] - 8, s[0], s[1] + 1 + yOff(s[3]), s[2]];
   }
   return null;
 }
 
-function useTwinStaffPos(id: string): [number, number, number, number] | null {
+// Not a React hook despite reading from useSim — it's the imperative .getState() escape
+// hatch, called from a plain function (lookForSelection), not a component. Named
+// getTwinStaffPos rather than useTwinStaffPos on purpose: the "use" prefix previously here
+// made the rules-of-hooks linter (correctly) flag this as a hook called conditionally
+// outside a component.
+function getTwinStaffPos(id: string): [number, number, number, number] | null {
   const s = useSim.getState().state.staff[id];
   return s ? [s.position[0], s.position[1], s.position[2], s.floor] : null;
 }

@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { RotateCcw, RefreshCw, WifiOff } from "lucide-react";
+import Link from "next/link";
+import { RotateCcw, RefreshCw, WifiOff, FileOutput } from "lucide-react";
 import { useSim } from "@/store/sim";
 import { moduleMeta } from "@/lib/intelligence/registry";
 import { fetchActionLog, fetchLatestSnapshot, type ActionLogEntry } from "@/lib/api/backend";
@@ -66,6 +67,10 @@ export function HistoryPage() {
       title="History"
       subtitle="A real, append-only audit log — every accepted or dismissed recommendation and every injected demo scenario, written to a SQLite database (app/api/actions) as it happens. State itself is snapshotted every 20 seconds (app/api/snapshots), so a page refresh mid-demo doesn't lose the shift."
     >
+      <Link href="/summary" className="flex w-fit items-center gap-2 rounded-lg border border-accent/40 bg-accent/5 px-3 py-2 text-[12.5px] text-accent hover:bg-accent/10">
+        <FileOutput size={14} /> Export a shift summary (PDF or JSON) →
+      </Link>
+
       <Card title="Persistence" right={<Provenance />}>
         <div className="flex items-center justify-between gap-4">
           <p className="max-w-[600px] text-[12px] leading-snug text-mid">

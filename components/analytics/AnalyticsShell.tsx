@@ -22,6 +22,7 @@ export const routes = [
   { href: "/concierge", label: "Concierge" },
   { href: "/integrations", label: "Integrations" },
   { href: "/history", label: "History" },
+  { href: "/summary", label: "Summary" },
 ];
 
 export function AnalyticsShell({ title, subtitle, children }: { title: string; subtitle: string; children: React.ReactNode }) {
@@ -30,6 +31,12 @@ export function AnalyticsShell({ title, subtitle, children }: { title: string; s
   const { state, setPaused, setSpeed } = useSim();
   useSim((s) => s.version);
   const [mounted, setMounted] = useState(false);
+  // Deliberate SSR-hydration gate, not an accidental effect: the sim store seeds
+  // independently on the server and on the client (two separate module instances), so the
+  // very first client render must match the server's markup exactly or React logs a
+  // hydration mismatch. Rendering the skeleton until after mount, then swapping to live
+  // children, is the standard fix — see the same pattern's rationale in the project docs.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => setMounted(true), []);
   return (
     <div className="relative flex h-full flex-col overflow-hidden bg-void">
