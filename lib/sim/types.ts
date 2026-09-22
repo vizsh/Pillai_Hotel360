@@ -141,7 +141,8 @@ export type ModuleId =
   | "sentiment"
   | "segmentation"
   | "relocation"
-  | "energy";
+  | "energy"
+  | "groupblock";
 
 export interface Recommendation {
   id: string;

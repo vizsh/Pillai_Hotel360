@@ -7,6 +7,7 @@ import { segmentationRecommendations } from "./segmentation";
 import { personalizationRecommendations } from "./personalization";
 import { guestImpactRecommendations } from "./guestImpact";
 import { energyRecommendations } from "./energy";
+import { groupBlockRecommendations } from "./groupBlocks";
 
 export const moduleMeta: Record<ModuleId, { label: string; short: string; color: string; description: string; method: string }> = {
   maintenance: { label: "Predictive Maintenance", short: "MAINT", color: "#f4436c", description: "Survival models on asset telemetry surface failures before a guest notices one.", method: "Weibull hazard + telemetry anomaly z-scores" },
@@ -19,6 +20,7 @@ export const moduleMeta: Record<ModuleId, { label: string; short: string; color:
   segmentation: { label: "Guest Segmentation", short: "SEG", color: "#94a3b8", description: "Behavioral clustering that produces segments you can price and market against.", method: "k-means (k=5, k-means++ init) on 6 normalized features" },
   relocation: { label: "Guest Impact & Relocation", short: "RELOC", color: "#f5a524", description: "When climate control fails, matches displaced guests to vacant rooms outside the affected zone and escorts them.", method: "Greedy same-or-better-type matching against vacant-clean inventory" },
   energy: { label: "Energy Intelligence", short: "NRG", color: "#4ade80", description: "Vacant rooms drawing full conditioning load are flagged and unconditioned automatically — no guest impact, pure waste recovered.", method: "Occupancy-gated HVAC waste detection against a fixed conditioned/unconditioned rate delta" },
+  groupblock: { label: "Group Block Optimizer", short: "GRP", color: "#818cf8", description: "Compares what the current group/event block is paying against transient ADR for the same occupied inventory, and flags when the gap is large enough to matter.", method: "Displacement analysis — group ADR vs. transient ADR at current occupancy" },
 };
 
 export function runModules(state: SimState, model: ResortModel): Recommendation[] {
@@ -30,5 +32,6 @@ export function runModules(state: SimState, model: ResortModel): Recommendation[
     ...personalizationRecommendations(state, model),
     ...guestImpactRecommendations(state, model),
     ...energyRecommendations(state, model),
+    ...groupBlockRecommendations(state, model),
   ];
 }

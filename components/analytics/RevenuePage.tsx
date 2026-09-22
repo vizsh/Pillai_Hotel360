@@ -4,7 +4,8 @@ import { Area, AreaChart, CartesianGrid, Line, LineChart, ReferenceLine, Respons
 import { useSim } from "@/store/sim";
 import { getModel } from "@/lib/architecture/model";
 import { computePricing, computeSegmentPricing } from "@/lib/intelligence/pricing";
-import { acceptRecommendation } from "@/lib/api/recommendationActions";
+import { assessGroupBlock } from "@/lib/intelligence/groupBlocks";
+import { acceptRecommendation, dismissRecommendationLogged } from "@/lib/api/recommendationActions";
 import { AnalyticsShell, Card, chartTheme } from "./AnalyticsShell";
 import { Button, Provenance, Stat, Tag } from "@/components/ui/primitives";
 import { cn, fmtINR, fmtPct } from "@/lib/utils";
@@ -25,6 +26,8 @@ export function RevenuePage() {
     return { type, rooms: rooms.length, occ, adr, revpar: adr * occ, rev7d: rs.reduce((s, r) => s + r.revenue7d, 0) };
   });
   const byFloor = model.floors.filter((f) => f.kind === "guest").map((f) => ({ floor: `F${f.index}`, rev: Math.round(f.rooms.reduce((s, r) => s + state.rooms[r.id].revenue7d, 0) / 1000), sea: Math.round(f.rooms.filter((r) => r.seaView).reduce((s, r) => s + state.rooms[r.id].revenue7d, 0) / 1000) }));
+  const groupBlock = assessGroupBlock(state, model);
+  const groupRec = Object.values(state.recommendations).find((r) => r.module === "groupblock" && r.status === "pending");
 
   return (
     <AnalyticsShell title="Revenue Studio" subtitle="Dynamic pricing on a constant-elasticity demand curve, with pacing, seasonality and competitor index as inputs. Accepting a rate writes it back into the twin.">
@@ -125,6 +128,43 @@ export function RevenuePage() {
               })}
             </tbody>
           </table>
+        </Card>
+      )}
+
+      {groupBlock.groupRooms > 0 && (
+        <Card title="Group / event block vs. transient" right={<Provenance kind="modeled" module="groupblock" />}>
+          <div className="grid grid-cols-5 gap-3">
+            <Stat label="Group rooms" value={String(groupBlock.groupRooms)} sub={`${fmtPct(groupBlock.groupShare)} of occupied`} />
+            <Stat label="Group ADR" value={fmtINR(groupBlock.groupAdr)} />
+            <Stat label="Transient ADR" value={fmtINR(groupBlock.transientAdr)} />
+            <Stat
+              label="Displacement"
+              value={fmtINR(groupBlock.displacementPerRoom)}
+              sub="per room / night"
+              accent={groupBlock.displacementPerRoom > 0 ? "var(--warm)" : undefined}
+            />
+            <Stat label="Occupancy" value={fmtPct(groupBlock.occupancy)} />
+          </div>
+          {groupRec ? (
+            <div className="mt-3 flex flex-col gap-2 rounded-lg border border-stroke bg-white/[0.02] p-3">
+              <p className="text-[12px] text-hi">{groupRec.title}</p>
+              <p className="text-[11.5px] text-mid">{groupRec.body}</p>
+              <div className="flex gap-2">
+                <Button variant="primary" onClick={() => acceptRecommendation(mutate, model, groupRec)}>
+                  {groupRec.action}
+                </Button>
+                <Button variant="ghost" onClick={() => dismissRecommendationLogged(mutate, groupRec)}>
+                  Dismiss
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <p className="mt-3 text-[11.5px] text-low">
+              {groupBlock.groupRooms < 5
+                ? "Group segment is too small right now to be a meaningful block — treated as noise, not signal."
+                : "No displacement action pending — group rate is within the modeled band for current occupancy."}
+            </p>
+          )}
         </Card>
       )}
 

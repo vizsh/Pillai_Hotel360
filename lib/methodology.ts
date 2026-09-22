@@ -72,4 +72,10 @@ export const methodology: Record<ModuleId, MethodologyEntry> = {
     source: "ENERGY STAR; hotel HVAC energy-management studies, 2025–2026",
     realWorldNote: "The 'guest checked in but away' signal already runs on a documented camera-presence contract — see /integrations.",
   },
+  groupblock: {
+    file: "lib/intelligence/groupBlocks.ts",
+    benchmark: "Displacement analysis — comparing a negotiated group/event block's rate against the transient rate the same rooms would command on the same dates — is standard hotel revenue-management practice for evaluating group business.",
+    source: "Hospitality Net; Cloudbeds and Revenuenaire revenue-management methodology guides",
+    realWorldNote: "This reasons over the currently in-house group/transient mix, since the simulator has no forward-reservations pipeline (guests materialize at check-in, not at booking). A real deployment would run the same math against a specific pending group RFP before it's accepted, using the PMS's booking pace and group-block records.",
+  },
 };

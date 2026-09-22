@@ -179,6 +179,10 @@ export function executeRecommendation(state: SimState, model: ResortModel, rec: 
     }
     case "concierge":
       break;
+    case "groupblock": {
+      pushFeed(state, "pricing", rec.action, "resort", "group-blocks", "info");
+      break;
+    }
   }
 }
 
