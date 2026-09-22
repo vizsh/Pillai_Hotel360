@@ -319,6 +319,7 @@ export function seedState(model: ResortModel, seed: number, scenario: Scenario):
       revenueToday: 0,
       energyToday: 0,
       energySavedToday: 0,
+      ancillaryRevenueToday: 0,
     },
     kpiHistory,
     baseRate,

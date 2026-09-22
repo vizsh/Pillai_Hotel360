@@ -38,9 +38,9 @@ export const methodology: Record<ModuleId, MethodologyEntry> = {
   },
   personalization: {
     file: "lib/intelligence/personalization.ts",
-    benchmark: "Rule-scored next-best-action ranking — transparent by design so every recommendation can show its basis, rather than a black-box model a GM can't explain to a guest.",
+    benchmark: "Rule-scored next-best-action ranking — transparent by design so every recommendation can show its basis, rather than a black-box model a GM can't explain to a guest. Each action carries both a sentiment uplift and, where it's a real upsell rather than service recovery, an incremental ₹ spend rolled up into a resort-wide ancillary-revenue KPI.",
     source: "Design choice, not an external benchmark",
-    realWorldNote: "Preference/history fields are seeded; real deployment reads guest profile + stay history from the PMS/CRM.",
+    realWorldNote: "Preference/history fields are seeded; real deployment reads guest profile + stay history from the PMS/CRM. Ancillary spend would reconcile against actual POS/spa-system transactions instead of being applied on accept.",
   },
   concierge: {
     file: "lib/intelligence/concierge.ts",

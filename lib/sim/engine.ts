@@ -251,6 +251,7 @@ export function tick(state: SimState, model: ResortModel, dtMin: number) {
     state.kpis.revenueToday = 0;
     state.kpis.energyToday = 0;
     state.kpis.energySavedToday = 0;
+    state.kpis.ancillaryRevenueToday = 0;
     pushFeed(state, "system", `Night audit complete · occupancy ${(state.kpis.occupancy * 100).toFixed(1)}%`);
   }
 

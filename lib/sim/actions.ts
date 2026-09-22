@@ -1,9 +1,34 @@
 import type { ResortModel } from "@/lib/architecture/types";
 import type { Recommendation, SimState } from "@/lib/sim/types";
 import type { RelocationPair } from "@/lib/intelligence/guestImpact";
+import type { NextBestAction } from "@/lib/intelligence/personalization";
 import { pushFeed, scheduleService, resolveAlert, nextId, createRequest, dispatchStaff, addAlert, refreshRecommendations } from "./engine";
 import { rateForRoom } from "./seed";
 import { clamp } from "@/lib/utils";
+
+/** The one place an accepted next-best-action's effect actually gets applied — sentiment
+ * AND, where the action is a real upsell rather than service recovery/relationship spend,
+ * incremental guest spend plus the resort-wide ancillaryRevenueToday KPI. Previously this
+ * logic was duplicated three times (BottomDock's recommendation-dock path via
+ * executeRecommendation below, RoomPanel's inline NBA card, GuestsPage's inline NBA card) —
+ * all three sentiment-only, none tracking revenue, free to drift out of sync with each
+ * other. Lives here rather than in lib/intelligence/personalization.ts to avoid that module
+ * importing back from lib/sim/engine.ts (personalization.ts stays a pure function of
+ * (guest, state, model), like every other intelligence module). */
+export function applyNextBestAction(state: SimState, model: ResortModel, guestId: string, nba: NextBestAction) {
+  const g = state.guests[guestId];
+  if (!g) return;
+  g.sentiment = clamp(g.sentiment + nba.uplift, -1, 1);
+  if (g.roomId) state.rooms[g.roomId].sentiment = g.sentiment;
+  if (nba.revenueUplift > 0) {
+    if (nba.spendCategory === "spa") g.spendSpa += nba.revenueUplift;
+    else if (nba.spendCategory === "fnb") g.spendFnb += nba.revenueUplift;
+    else g.spendOther += nba.revenueUplift;
+    state.kpis.ancillaryRevenueToday += nba.revenueUplift;
+  }
+  const roomNumber = g.roomId ? model.roomById.get(g.roomId)?.number : undefined;
+  pushFeed(state, "task", `${nba.label} → ${g.name}${roomNumber ? ` (${roomNumber})` : ""}${nba.revenueUplift > 0 ? ` · +₹${nba.revenueUplift.toLocaleString("en-IN")}` : ""}`, "guest", g.id);
+}
 
 /** Moves a guest out of a room whose climate asset has failed into a vacant-clean
  * room outside that asset's zone. The vacated room goes `ooo` (unsellable) rather
@@ -76,12 +101,19 @@ export function executeRecommendation(state: SimState, model: ResortModel, rec: 
       break;
     }
     case "personalization": {
-      const g = state.guests[p.guestId as string];
-      if (g) {
-        g.sentiment = clamp(g.sentiment + (p.uplift as number), -1, 1);
-        if (g.roomId) state.rooms[g.roomId].sentiment = g.sentiment;
-        resolveAlert(state, `sent-${g.id}`);
-        pushFeed(state, "task", `${rec.action} → ${g.name}`, "guest", g.id, "info");
+      const guestId = p.guestId as string;
+      if (state.guests[guestId]) {
+        applyNextBestAction(state, model, guestId, {
+          id: p.actionId as string,
+          label: rec.action,
+          score: rec.confidence,
+          reason: "",
+          cost: 0,
+          uplift: p.uplift as number,
+          revenueUplift: (p.revenueUplift as number) ?? 0,
+          spendCategory: (p.spendCategory as NextBestAction["spendCategory"]) ?? "none",
+        });
+        resolveAlert(state, `sent-${guestId}`);
       }
       break;
     }

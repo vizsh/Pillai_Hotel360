@@ -126,8 +126,9 @@ export function OverviewPanel() {
         </Section>
       )}
 
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 gap-3">
         <Stat label="Revenue today" value={fmtINR(k.revenueToday)} />
+        <Stat label="Ancillary revenue" value={fmtINR(k.ancillaryRevenueToday)} accent="var(--positive)" sub="from accepted NBAs" />
         <Stat label="Energy today" value={`${k.energyToday.toFixed(0)} kWh`} sub={`${Object.values(state.rooms).filter((r) => r.conditioned && !r.guestId).length} vacant rooms conditioned`} />
         <Stat label="Energy saved" value={`${k.energySavedToday.toFixed(0)} kWh`} accent="var(--accent)" sub={fmtINR(k.energySavedToday * 9)} />
       </div>

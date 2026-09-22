@@ -8,7 +8,7 @@ import { getModel } from "@/lib/architecture/model";
 import { statusColors, statusLabels } from "@/lib/twin/colors";
 import { nextBestActions } from "@/lib/intelligence/personalization";
 import { worstAssetForRoom } from "@/lib/twin/trace";
-import { setRoomConditioning } from "@/lib/sim/actions";
+import { setRoomConditioning, applyNextBestAction } from "@/lib/sim/actions";
 import { createRequest, dispatchStaff, pushFeed, fmtClock } from "@/lib/sim/engine";
 import { Button, Meter, Provenance, Section, Stat, Tag } from "@/components/ui/primitives";
 import { fmtINR, cn } from "@/lib/utils";
@@ -160,20 +160,12 @@ export function RoomPanel({ id }: { id: string }) {
                 <div className="mono w-9 text-[13px] text-positive">{a.score.toFixed(2)}</div>
                 <div className="flex-1">
                   <div className="text-[12px] text-hi">{a.label}</div>
-                  <div className="text-[10.5px] text-low">{a.reason}</div>
+                  <div className="text-[10.5px] text-low">
+                    {a.reason}
+                    {a.revenueUplift > 0 && <span className="text-positive"> · +{fmtINR(a.revenueUplift)}</span>}
+                  </div>
                 </div>
-                <Button
-                  size="sm"
-                  variant="subtle"
-                  onClick={() =>
-                    mutate((s) => {
-                      const gg = s.guests[g!.id];
-                      gg.sentiment = Math.min(1, gg.sentiment + a.uplift);
-                      s.rooms[id].sentiment = gg.sentiment;
-                      pushFeed(s, "task", `${a.label} → ${gg.name} (${cell.number})`, "guest", gg.id);
-                    })
-                  }
-                >
+                <Button size="sm" variant="subtle" onClick={() => mutate((s) => applyNextBestAction(s, model, g!.id, a))}>
                   <Sparkles size={12} /> Do it
                 </Button>
               </div>

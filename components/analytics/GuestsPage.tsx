@@ -7,6 +7,7 @@ import { useTwin } from "@/store/twin";
 import { getModel } from "@/lib/architecture/model";
 import { segmentGuests, guestVector, featureNames } from "@/lib/intelligence/segmentation";
 import { nextBestActions } from "@/lib/intelligence/personalization";
+import { applyNextBestAction } from "@/lib/sim/actions";
 import { AnalyticsShell, Card, chartTheme } from "./AnalyticsShell";
 import { Button, Provenance, Stat, Tag } from "@/components/ui/primitives";
 import { fmtINR, cn } from "@/lib/utils";
@@ -31,12 +32,13 @@ export function GuestsPage() {
 
   return (
     <AnalyticsShell title="Guest Intelligence" subtitle="k-means behavioral segmentation over in-house guests, with a per-guest next-best-action ranking derived from preferences, loyalty and stay stage.">
-      <div className="grid grid-cols-5 gap-4">
+      <div className="grid grid-cols-6 gap-4">
         <Stat label="In-house guests" value={String(guests.length)} />
         <Stat label="VIP" value={String(guests.filter((g) => g.vip).length)} />
         <Stat label="Avg sentiment" value={(guests.reduce((s, g) => s + g.sentiment, 0) / Math.max(1, guests.length)).toFixed(2)} />
         <Stat label="At-risk (< −0.2)" value={String(guests.filter((g) => g.sentiment < -0.2).length)} accent="var(--critical)" />
         <Stat label="Avg spend / guest" value={fmtINR(guests.reduce((s, g) => s + g.spendRoom + g.spendFnb + g.spendSpa + g.spendOther, 0) / Math.max(1, guests.length))} />
+        <Stat label="Ancillary revenue today" value={fmtINR(state.kpis.ancillaryRevenueToday)} sub="from accepted NBAs" accent="var(--positive)" />
       </div>
 
       <div className="grid grid-cols-3 gap-4">
@@ -112,9 +114,12 @@ export function GuestsPage() {
                   {g.vip && <Tag color="#f5d26b">VIP</Tag>}
                 </div>
                 <div className="truncate text-[11px] text-mid">{a.label}</div>
-                <div className="truncate text-[10px] text-low">{a.reason}</div>
+                <div className="truncate text-[10px] text-low">
+                  {a.reason}
+                  {a.revenueUplift > 0 && <span className="text-positive"> · +{fmtINR(a.revenueUplift)}</span>}
+                </div>
               </div>
-              <Button size="sm" variant="subtle" onClick={() => mutate((s) => { const gg = s.guests[g.id]; gg.sentiment = Math.min(1, gg.sentiment + a.uplift); if (gg.roomId) s.rooms[gg.roomId].sentiment = gg.sentiment; pushFeed(s, "task", `${a.label} → ${gg.name}`, "guest", gg.id); })}>
+              <Button size="sm" variant="subtle" onClick={() => mutate((s) => applyNextBestAction(s, model, g.id, a))}>
                 Do it
               </Button>
             </div>

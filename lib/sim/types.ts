@@ -208,6 +208,11 @@ export interface Kpis {
   revenueToday: number;
   energyToday: number;
   energySavedToday: number;
+  /** Incremental F&B/spa/other spend directly attributable to an accepted personalization
+   * next-best-action (a spa credit taken up, a sunset table booked, …) — distinct from
+   * revenueToday, which is room revenue only. Zero until lib/intelligence/personalization.ts
+   * actually models this; previously every NBA only ever moved guest sentiment. */
+  ancillaryRevenueToday: number;
 }
 
 export interface ChatMessage {
