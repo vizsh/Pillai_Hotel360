@@ -9,6 +9,7 @@ import { assetNode, findPath, nearestNode, roomDoorNode, zoneNode } from "./nav"
 import { assessAsset, maintenanceRecommendations, statusFor } from "@/lib/intelligence/maintenance";
 import { scoreText, sentimentRecommendations } from "@/lib/intelligence/sentiment";
 import { runModules } from "@/lib/intelligence/registry";
+import { FATIGUE_BASE_ACCRUAL, FATIGUE_OVERLOAD_ACCRUAL, FATIGUE_RECOVERY_RATE, STANDARD_ROOMS_PER_HK_SHIFT } from "@/lib/intelligence/staffing";
 
 let counter = 1;
 let rand: Rand = mulberry32(1);
@@ -295,7 +296,17 @@ export function tick(state: SimState, model: ResortModel, dtMin: number) {
     }
   }
 
+  const hkOnDuty = Object.values(state.staff).filter((s) => s.dept === "housekeeping" && s.status !== "off").length;
+  const hkDirty = rooms.filter((r) => r.status === "vacant-dirty").length;
+  // Industry standard is 12-16 rooms per attendant per 8h shift (midpoint 14); how far
+  // today's backlog-per-attendant sits above that standard drives how fast fatigue accrues.
+  const hkOverloadRatio = hkOnDuty > 0 ? Math.max(0, hkDirty / hkOnDuty / STANDARD_ROOMS_PER_HK_SHIFT - 1) : hkDirty > 0 ? 1 : 0;
+
   for (const s of Object.values(state.staff)) {
+    if (s.dept === "housekeeping") {
+      if (s.status === "working") s.fatigue = clamp(s.fatigue + (FATIGUE_BASE_ACCRUAL + hkOverloadRatio * FATIGUE_OVERLOAD_ACCRUAL) * dtH, 0, 1);
+      else if (s.status === "off") s.fatigue = clamp(s.fatigue - FATIGUE_RECOVERY_RATE * dtH, 0, 1);
+    }
     if (s.status === "moving") {
       const arrived = moveStaff(s, dtMin);
       s.floor = floorOfY(s.position[1], model);

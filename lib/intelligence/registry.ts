@@ -1,7 +1,7 @@
 import type { ResortModel } from "@/lib/architecture/types";
 import type { ModuleId, Recommendation, SimState } from "@/lib/sim/types";
 import { pricingRecommendations } from "./pricing";
-import { staffingRecommendations } from "./staffing";
+import { housekeepingBurnoutRecommendations, staffingRecommendations } from "./staffing";
 import { inventoryRecommendations } from "./inventory";
 import { segmentationRecommendations } from "./segmentation";
 import { personalizationRecommendations } from "./personalization";
@@ -27,6 +27,7 @@ export function runModules(state: SimState, model: ResortModel): Recommendation[
   return [
     ...pricingRecommendations(state, model),
     ...staffingRecommendations(state, model),
+    ...housekeepingBurnoutRecommendations(state),
     ...inventoryRecommendations(state, model),
     ...segmentationRecommendations(state, model),
     ...personalizationRecommendations(state, model),

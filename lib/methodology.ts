@@ -26,9 +26,9 @@ export const methodology: Record<ModuleId, MethodologyEntry> = {
   },
   staffing: {
     file: "lib/intelligence/staffing.ts",
-    benchmark: "Hospitality labor is 52% of full-service hotel opex; annual turnover runs 70–80% (vs 12–15% cross-industry), with housekeeping the most short-staffed department (38% of hotels).",
-    source: "CBRE 2025 Trends; industry turnover benchmarking",
-    realWorldNote: "Demand profiles are synthetic; a live deployment would fit them against the property's own historical occupancy-to-labor ratio.",
+    benchmark: "Hospitality labor is 52% of full-service hotel opex; annual turnover runs 70–80% (vs 12–15% cross-industry), with housekeeping the most short-staffed department (38% of hotels). Room attendants sustainably clean 12–16 rooms per 8h shift (14-room standard used here); held above that standard, burnout research documents up to 55% departure within 90 days, and SHRM benchmarks the fully-loaded replacement cost at ~$9,932 per hourly hospitality worker.",
+    source: "CBRE 2025 Trends; industry turnover benchmarking; SHRM 2025 hourly-worker replacement cost benchmarking; hotel housekeeper job-stress/burnout research",
+    realWorldNote: "Demand profiles are synthetic; a live deployment would fit them against the property's own historical occupancy-to-labor ratio. Fatigue is tracked per housekeeping staff member (Staff.fatigue) from actual shift load vs. the 14-room standard — a real deployment would validate the accrual/recovery rates against wearable or scheduling-system fatigue data instead of the modeled constants.",
   },
   inventory: {
     file: "lib/intelligence/inventory.ts",

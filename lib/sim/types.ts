@@ -80,6 +80,11 @@ export interface Staff {
   tasksDone: number;
   hoursToday: number;
   homeNode: string;
+  /** 0–1 accumulated workload strain, currently only modeled for housekeeping (see
+   * lib/intelligence/staffing.ts's burnout assessment). Builds while working understaffed
+   * shifts (rooms-per-attendant above the 14-room industry standard), recovers during
+   * off-duty hours. Zero and inert for every other department — not modeled there. */
+  fatigue: number;
 }
 
 export type AssetStatus = "healthy" | "degraded" | "critical" | "service" | "failed";

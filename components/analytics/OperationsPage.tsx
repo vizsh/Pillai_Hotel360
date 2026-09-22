@@ -4,12 +4,12 @@ import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YA
 import { useSim } from "@/store/sim";
 import { useTwin } from "@/store/twin";
 import { getModel } from "@/lib/architecture/model";
-import { depts, forecastDemand, solveRoster } from "@/lib/intelligence/staffing";
+import { assessHousekeepingFatigue, BURNOUT_THRESHOLD, depts, forecastDemand, solveRoster, STANDARD_ROOMS_PER_HK_SHIFT } from "@/lib/intelligence/staffing";
 import { deptColors } from "@/lib/twin/colors";
 import { acceptRecommendation } from "@/lib/api/recommendationActions";
 import { fmtClock } from "@/lib/sim/engine";
 import { AnalyticsShell, Card, chartTheme } from "./AnalyticsShell";
-import { Button, Provenance, Stat, Tag } from "@/components/ui/primitives";
+import { Button, Meter, Provenance, Stat, Tag } from "@/components/ui/primitives";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
 
@@ -24,6 +24,7 @@ export function OperationsPage() {
   const recs = Object.values(state.recommendations).filter((r) => r.module === "staffing" && r.status === "pending");
   const done = Object.values(state.requests).filter((r) => r.status === "done");
   const onTime = done.filter((r) => (r.completedAt ?? 0) - r.createdAt <= r.slaMin).length;
+  const hkFatigue = assessHousekeepingFatigue(state);
 
   return (
     <AnalyticsShell title="Operations & Staffing" subtitle="Hourly demand forecast per department, solved into a shift roster with greedy allocation and pairwise swap improvement. Gaps become call-in recommendations.">
@@ -119,6 +120,32 @@ export function OperationsPage() {
             ))}
           </tbody>
         </table>
+      </Card>
+
+      <Card
+        title="Housekeeping fatigue"
+        right={<Provenance kind="modeled" module="staffing" />}
+      >
+        <div className="grid grid-cols-4 gap-3">
+          <Stat label="Avg fatigue" value={`${(hkFatigue.avgFatigue * 100).toFixed(0)}%`} accent={hkFatigue.avgFatigue >= BURNOUT_THRESHOLD ? "var(--critical)" : hkFatigue.avgFatigue >= BURNOUT_THRESHOLD * 0.7 ? "var(--warm)" : undefined} />
+          <Stat label="At burnout risk" value={String(hkFatigue.atRisk.length)} sub={`of ${hkFatigue.staffCount} · ≥${(BURNOUT_THRESHOLD * 100).toFixed(0)}%`} accent={hkFatigue.atRisk.length > 0 ? "var(--warm)" : undefined} />
+          <Stat label="Rooms / attendant" value={hkFatigue.loadPerAttendant.toFixed(1)} sub={`standard ${STANDARD_ROOMS_PER_HK_SHIFT}`} accent={hkFatigue.loadPerAttendant > STANDARD_ROOMS_PER_HK_SHIFT ? "var(--warm)" : undefined} />
+          <Stat label="Over standard" value={hkFatigue.loadPerAttendant > STANDARD_ROOMS_PER_HK_SHIFT ? `+${(hkFatigue.loadPerAttendant - STANDARD_ROOMS_PER_HK_SHIFT).toFixed(1)}` : "0"} />
+        </div>
+        {hkFatigue.atRisk.length > 0 && (
+          <div className="mt-3 flex flex-col gap-1.5 border-t border-stroke/60 pt-3">
+            {hkFatigue.atRisk.slice(0, 6).map((s) => (
+              <div key={s.id} className="flex items-center gap-2">
+                <span className="w-28 truncate text-[11.5px] text-mid">{s.name}</span>
+                <Meter value={s.fatigue} color="var(--warm)" className="flex-1" />
+                <span className="mono w-10 text-right text-[10.5px] text-low">{(s.fatigue * 100).toFixed(0)}%</span>
+              </div>
+            ))}
+          </div>
+        )}
+        <p className="mt-3 text-[11px] text-low">
+          Fatigue accrues while working shifts above the {STANDARD_ROOMS_PER_HK_SHIFT}-room-per-attendant standard, and recovers off-duty. Sustained overload correlates with up to 55% 90-day turnover in hotel housekeeping research — the burnout recommendation above prices that exposure.
+        </p>
       </Card>
 
       <div className="grid grid-cols-2 gap-4">

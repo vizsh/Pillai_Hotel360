@@ -175,6 +175,7 @@ export function seedState(model: ResortModel, seed: number, scenario: Scenario):
         tasksDone: randInt(r, 0, 6),
         hoursToday: onShift ? randRange(r, 0.5, 5) : 0,
         homeNode: "nav-g-core",
+        fatigue: dept === "housekeeping" ? randRange(r, 0.1, 0.35) : 0,
       };
     }
   }
