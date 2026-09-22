@@ -1,15 +1,16 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Check, X, ChevronDown, ChevronUp, Sparkles, Activity, Bell, Radar } from "lucide-react";
+import { Check, X, ChevronDown, ChevronUp, ChevronsDown, Sparkles, Activity, Bell, Radar } from "lucide-react";
 import { useSim } from "@/store/sim";
 import { useTwin, type Selection } from "@/store/twin";
 import { useTrace } from "@/store/trace";
 import { useDirector } from "@/store/director";
+import { useUi } from "@/store/ui";
 import { getModel } from "@/lib/architecture/model";
 import { moduleMeta } from "@/lib/intelligence/registry";
 import { sampleServedRoom } from "@/lib/twin/trace";
-import { executeRecommendation, dismissRecommendation } from "@/lib/sim/actions";
+import { acceptRecommendation, dismissRecommendationLogged } from "@/lib/api/recommendationActions";
 import { fmtClock, resolveAlert } from "@/lib/sim/engine";
 import type { Recommendation } from "@/lib/sim/types";
 import { Button, Tag, sevColor } from "@/components/ui/primitives";
@@ -46,7 +47,11 @@ function RecCard({ rec }: { rec: Recommendation }) {
       style={{ borderLeftColor: meta.color, borderLeftWidth: 2 }}
     >
       <div className="flex items-center justify-between">
-        <Tag color={meta.color}>{meta.short}</Tag>
+        <button onClick={() => useUi.getState().openMethodology(rec.module)} title="How this number is calculated">
+          <Tag color={meta.color} className="cursor-pointer hover:brightness-125">
+            {meta.short}
+          </Tag>
+        </button>
         <div className="mono flex items-center gap-2 text-[10px] text-low">
           <span title="Model confidence">conf {rec.confidence.toFixed(2)}</span>
           <span>{fmtClock(rec.createdAt)}</span>
@@ -71,10 +76,10 @@ function RecCard({ rec }: { rec: Recommendation }) {
       <div className="mt-3 flex items-center gap-1.5">
         {rec.status === "pending" ? (
           <>
-            <Button size="sm" variant="primary" onClick={() => mutate((s) => executeRecommendation(s, model, s.recommendations[rec.id]))}>
+            <Button size="sm" variant="primary" onClick={() => acceptRecommendation(mutate, model, rec)}>
               <Check size={12} /> Accept
             </Button>
-            <Button size="sm" variant="ghost" onClick={() => mutate((s) => dismissRecommendation(s, s.recommendations[rec.id]))}>
+            <Button size="sm" variant="ghost" onClick={() => dismissRecommendationLogged(mutate, rec)}>
               <X size={12} /> Dismiss
             </Button>
             {rec.module === "maintenance" && rec.targetKind === "asset" && (
@@ -100,9 +105,16 @@ function RecCard({ rec }: { rec: Recommendation }) {
   );
 }
 
+/** Below this confidence, a pending recommendation is real but not urgent enough to
+ * default-show in a dock a judge sees for three minutes — it's one click away behind
+ * "Show N more", not hidden. Executed/dismissed cards are behind the same toggle: they're
+ * history now, and /history has the full record. */
+const PRIORITY_CONFIDENCE = 0.7;
+
 export function BottomDock() {
   const [tab, setTab] = useState<Tab>("recs");
   const [collapsed, setCollapsed] = useState(false);
+  const [showAllRecs, setShowAllRecs] = useState(false);
   const { state, mutate } = useSim();
   useSim((s) => s.version);
   useEffect(
@@ -113,6 +125,7 @@ export function BottomDock() {
           if (id) {
             setTab("recs");
             setCollapsed(false);
+            setShowAllRecs(true);
           }
         },
       ),
@@ -120,6 +133,9 @@ export function BottomDock() {
   );
   const recs = Object.values(state.recommendations).sort((a, b) => (a.status === "pending" ? 0 : 1) - (b.status === "pending" ? 0 : 1) || b.confidence - a.confidence);
   const pending = recs.filter((r) => r.status === "pending").length;
+  const priorityRecs = recs.filter((r) => r.status === "pending" && r.confidence >= PRIORITY_CONFIDENCE);
+  const deferredRecs = recs.filter((r) => !(r.status === "pending" && r.confidence >= PRIORITY_CONFIDENCE));
+  const visibleRecs = showAllRecs ? recs : priorityRecs;
   const alerts = Object.values(state.alerts).filter((a) => !a.resolvedAt).sort((a, b) => ({ critical: 0, warn: 1, info: 2 })[a.severity] - ({ critical: 0, warn: 1, info: 2 })[b.severity] || b.createdAt - a.createdAt);
   const feed = state.feed.slice(-60).reverse();
 
@@ -149,11 +165,37 @@ export function BottomDock() {
           {tab === "recs" &&
             (recs.length === 0 ? (
               <p className="p-3 text-[12px] text-low">No recommendations yet — the modules re-evaluate every 30 simulated minutes.</p>
+            ) : visibleRecs.length === 0 ? (
+              <div className="flex h-full items-center gap-3 p-3">
+                <p className="text-[12px] text-low">Nothing above {Math.round(PRIORITY_CONFIDENCE * 100)}% confidence right now.</p>
+                <button onClick={() => setShowAllRecs(true)} className="mono flex items-center gap-1 rounded-md border border-stroke px-2 py-1 text-[11px] text-mid hover:border-stroke-lit hover:text-hi">
+                  <ChevronsDown size={12} /> Show {deferredRecs.length} lower-confidence
+                </button>
+              </div>
             ) : (
               <div className="flex gap-2">
-                {recs.map((r) => (
+                {visibleRecs.map((r) => (
                   <RecCard key={r.id} rec={r} />
                 ))}
+                {!showAllRecs && deferredRecs.length > 0 && (
+                  <button
+                    onClick={() => setShowAllRecs(true)}
+                    className="mono flex w-[140px] shrink-0 flex-col items-center justify-center gap-1.5 rounded-lg border border-dashed border-stroke text-[11px] text-mid hover:border-stroke-lit hover:text-hi"
+                  >
+                    <ChevronsDown size={14} />
+                    +{deferredRecs.length} more
+                    <span className="text-[10px] text-low">below {Math.round(PRIORITY_CONFIDENCE * 100)}% conf.</span>
+                  </button>
+                )}
+                {showAllRecs && deferredRecs.length > 0 && (
+                  <button
+                    onClick={() => setShowAllRecs(false)}
+                    className="mono flex w-[100px] shrink-0 flex-col items-center justify-center gap-1.5 rounded-lg border border-dashed border-stroke text-[11px] text-mid hover:border-stroke-lit hover:text-hi"
+                  >
+                    <ChevronUp size={14} />
+                    Show fewer
+                  </button>
+                )}
               </div>
             ))}
           {tab === "feed" && (

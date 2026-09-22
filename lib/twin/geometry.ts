@@ -93,22 +93,30 @@ export function buildFacadeGlass(cfg: ResortConfig, floor: FloorSpec, model: Res
 export function buildMullions(cfg: ResortConfig, floor: FloorSpec, model: ResortModel) {
   const parts: THREE.BufferGeometry[] = [];
   const h = floor.height - cfg.tower.slabThickness;
-  const D = model.dims.depth / 2 + 0.32;
-  const L = model.dims.length / 2 + 0.32;
+  // Projects further past the glass plane (was +0.32 vs glass's +0.3 — barely 0.02 of
+  // relief) so the frame reads as a real extruded member catching its own shadow instead
+  // of sitting almost flush with the glass.
+  const D = model.dims.depth / 2 + 0.36;
+  const L = model.dims.length / 2 + 0.36;
   const step = floor.kind === "ground" ? 4 : cfg.plate.roomW / 2;
   for (let x = -L; x <= L + 0.01; x += step) {
-    parts.push(box(0.08, h, 0.12, x, h / 2, D));
-    parts.push(box(0.08, h, 0.12, x, h / 2, -D));
+    parts.push(box(0.1, h, 0.16, x, h / 2, D));
+    parts.push(box(0.1, h, 0.16, x, h / 2, -D));
   }
   for (let z = -D; z <= D + 0.01; z += step) {
-    parts.push(box(0.12, h, 0.08, L, h / 2, z));
-    parts.push(box(0.12, h, 0.08, -L, h / 2, z));
+    parts.push(box(0.16, h, 0.1, L, h / 2, z));
+    parts.push(box(0.16, h, 0.1, -L, h / 2, z));
   }
-  parts.push(box(model.dims.length + 0.7, 0.4, 0.14, 0, 0.2, D));
-  parts.push(box(model.dims.length + 0.7, 0.4, 0.14, 0, 0.2, -D));
+  parts.push(box(model.dims.length + 0.7, 0.4, 0.18, 0, 0.2, D));
+  parts.push(box(model.dims.length + 0.7, 0.4, 0.18, 0, 0.2, -D));
   return merge(parts);
 }
 
+/** Balcony floor slabs + corner posts + top/bottom rails only — the see-through baluster
+ * bars themselves are a separate merged geometry (buildBalconyRailings) so they can take a
+ * thinner, more reflective material than the solid concrete slab/posts without splitting
+ * the balcony into more draw calls than necessary (two merged meshes total, still just two
+ * draw calls for every balcony on the floor combined). */
 export function buildBalconies(cfg: ResortConfig, floor: FloorSpec, model: ResortModel) {
   const parts: THREE.BufferGeometry[] = [];
   const D = model.dims.depth / 2 + 0.3;
@@ -117,9 +125,47 @@ export function buildBalconies(cfg: ResortConfig, floor: FloorSpec, model: Resor
     const depth = 1.5;
     const z = -D - depth / 2;
     parts.push(box(r.w - 0.3, 0.16, depth, r.center[0], -0.08, z));
-    parts.push(box(r.w - 0.3, 1.05, 0.05, r.center[0], 0.52, -D - depth + 0.03));
-    parts.push(box(0.05, 1.05, depth, r.center[0] - r.w / 2 + 0.16, 0.52, z));
-    parts.push(box(0.05, 1.05, depth, r.center[0] + r.w / 2 - 0.16, 0.52, z));
+    parts.push(box(0.06, 1.0, 0.06, r.center[0] - r.w / 2 + 0.16, 0.42, -D - depth + 0.06));
+    parts.push(box(0.06, 1.0, 0.06, r.center[0] + r.w / 2 - 0.16, 0.42, -D - depth + 0.06));
+    parts.push(box(0.06, 1.0, 0.06, r.center[0] - r.w / 2 + 0.16, 0.42, z));
+    parts.push(box(0.06, 1.0, 0.06, r.center[0] + r.w / 2 - 0.16, 0.42, z));
+  }
+  return merge(parts);
+}
+
+const BALUSTER_GAP = 0.16;
+
+/** Vertical bars + top/bottom rail for every south-facing balcony on this floor, merged
+ * into one geometry — a solid panel (the old approach) reads as a wall; thin evenly-spaced
+ * bars read as an actual railing you can see the pool deck through. */
+export function buildBalconyRailings(cfg: ResortConfig, floor: FloorSpec, model: ResortModel) {
+  const parts: THREE.BufferGeometry[] = [];
+  const D = model.dims.depth / 2 + 0.3;
+  for (const r of floor.rooms) {
+    if (r.side !== "south") continue;
+    const depth = 1.5;
+    const zFront = -D - depth + 0.06;
+    const zBack = -D - 0.02;
+    const x0 = r.center[0] - r.w / 2 + 0.16;
+    const x1 = r.center[0] + r.w / 2 - 0.16;
+    const span = x1 - x0;
+    // Top + bottom rail along the front edge (the outward-facing side of the balcony).
+    parts.push(box(span, 0.05, 0.04, r.center[0], 0.9, zFront));
+    parts.push(box(span, 0.04, 0.04, r.center[0], 0.12, zFront));
+    // Top + bottom rail along both side returns.
+    parts.push(box(0.04, 0.05, depth, x0, 0.9, -D - depth / 2));
+    parts.push(box(0.04, 0.05, depth, x1, 0.9, -D - depth / 2));
+    const n = Math.max(2, Math.round(span / BALUSTER_GAP));
+    for (let i = 0; i <= n; i++) {
+      const x = x0 + (span * i) / n;
+      parts.push(box(0.025, 0.78, 0.025, x, 0.5, zFront));
+    }
+    const nSide = Math.max(1, Math.round(depth / BALUSTER_GAP));
+    for (let i = 0; i <= nSide; i++) {
+      const z = zBack - (depth * i) / nSide;
+      parts.push(box(0.025, 0.78, 0.025, x0, 0.5, z));
+      parts.push(box(0.025, 0.78, 0.025, x1, 0.5, z));
+    }
   }
   return merge(parts);
 }

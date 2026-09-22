@@ -1,6 +1,8 @@
 "use client";
 
 import { cn } from "@/lib/utils";
+import { useUi } from "@/store/ui";
+import type { ModuleId } from "@/lib/sim/types";
 import type { ButtonHTMLAttributes, ReactNode } from "react";
 
 export function Button({ className, variant = "ghost", size = "md", ...props }: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: "ghost" | "primary" | "outline" | "danger" | "subtle"; size?: "sm" | "md" | "icon" }) {
@@ -31,9 +33,19 @@ export function Tag({ children, color, className }: { children: ReactNode; color
   );
 }
 
-export const Provenance = ({ kind = "simulated" }: { kind?: "simulated" | "modeled" | "derived" }) => (
-  <Tag className="opacity-70">{kind}</Tag>
-);
+/** Passive by default (a tag stating how real a number is) — becomes a clickable trigger
+ * for the methodology panel when a `module` is given, i.e. wherever the tag is standing in
+ * for one specific intelligence module's output rather than data in general. Not every
+ * usage maps to a single module (e.g. general telemetry, a page-wide header) — those stay
+ * passive rather than being force-fit to a module they don't actually represent. */
+export const Provenance = ({ kind = "simulated", module }: { kind?: "simulated" | "modeled" | "derived"; module?: ModuleId }) => {
+  if (!module) return <Tag className="opacity-70">{kind}</Tag>;
+  return (
+    <button onClick={() => useUi.getState().openMethodology(module)} title="How this is calculated">
+      <Tag className="cursor-pointer opacity-70 transition-opacity hover:opacity-100">{kind}</Tag>
+    </button>
+  );
+};
 
 export function Stat({ label, value, sub, accent, className }: { label: string; value: ReactNode; sub?: ReactNode; accent?: string; className?: string }) {
   return (

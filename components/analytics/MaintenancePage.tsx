@@ -60,7 +60,7 @@ export function MaintenancePage() {
                   </Button>
                 </Link>
               )}
-              <Provenance kind="modeled" />
+              <Provenance kind="modeled" module="maintenance" />
             </div>
           }
           className="col-span-2"

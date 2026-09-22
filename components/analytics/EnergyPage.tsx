@@ -6,7 +6,7 @@ import { useSim } from "@/store/sim";
 import { useTwin } from "@/store/twin";
 import { getModel } from "@/lib/architecture/model";
 import { assessEnergyWaste } from "@/lib/intelligence/energy";
-import { executeRecommendation, dismissRecommendation } from "@/lib/sim/actions";
+import { acceptRecommendation, dismissRecommendationLogged } from "@/lib/api/recommendationActions";
 import type { Recommendation } from "@/lib/sim/types";
 import { AnalyticsShell, Card } from "./AnalyticsShell";
 import { Button, Provenance, Stat, Tag } from "@/components/ui/primitives";
@@ -24,10 +24,10 @@ function RecRow({ rec, model, mutate }: { rec: Recommendation | undefined; model
         <p className="mt-1.5 text-[11.5px] text-accent/90">{pending.impact}</p>
       </div>
       <div className="flex shrink-0 items-center gap-1.5">
-        <Button size="sm" variant="primary" onClick={() => mutate((s) => executeRecommendation(s, model, s.recommendations[pending.id]))}>
+        <Button size="sm" variant="primary" onClick={() => acceptRecommendation(mutate, model, pending)}>
           Accept
         </Button>
-        <Button size="sm" variant="ghost" onClick={() => mutate((s) => dismissRecommendation(s, s.recommendations[pending.id]))}>
+        <Button size="sm" variant="ghost" onClick={() => dismissRecommendationLogged(mutate, pending)}>
           Dismiss
         </Button>
       </div>
@@ -56,7 +56,7 @@ export function EnergyPage() {
         <Stat label="Saved today" value={`₹${Math.round(savedToday * COST_PER_KWH).toLocaleString("en-IN")}`} sub={`${savedToday.toFixed(1)} kWh`} accent="var(--accent)" />
       </div>
 
-      <Card title="Recommendations" right={<Provenance kind="modeled" />}>
+      <Card title="Recommendations" right={<Provenance kind="modeled" module="energy" />}>
         {anyPending ? (
           <div className="flex flex-col">
             <RecRow rec={vacantRec} model={model} mutate={mutate} />
@@ -106,7 +106,7 @@ export function EnergyPage() {
           )}
         </Card>
 
-        <Card title={`Occupied, guest away · CCTV (${a.awayCandidates.length})`} right={<Provenance />}>
+        <Card title={`Occupied, guest away · CCTV (${a.awayCandidates.length})`} right={<Provenance module="energy" />}>
           {a.awayCandidates.length === 0 ? (
             <p className="text-[12px] text-low">No checked-in room currently reads as empty on camera.</p>
           ) : (

@@ -5,6 +5,7 @@ import type { FloorSpec, ResortModel } from "@/lib/architecture/types";
 import type { ResortConfig } from "@/lib/architecture/config";
 import {
   buildBalconies,
+  buildBalconyRailings,
   buildFacadeGlass,
   buildFloorSlab,
   buildGuestFloorWalls,
@@ -26,6 +27,7 @@ function FloorShell({ floor, cfg, model }: { floor: FloorSpec; cfg: ResortConfig
       glass: buildFacadeGlass(cfg, floor, model),
       mullions: buildMullions(cfg, floor, model),
       balconies: buildBalconies(cfg, floor, model),
+      railings: buildBalconyRailings(cfg, floor, model),
     }),
     [cfg, floor, model],
   );
@@ -35,15 +37,17 @@ function FloorShell({ floor, cfg, model }: { floor: FloorSpec; cfg: ResortConfig
       wall: makeWall(),
       glass: makeGlass(profile.transmission),
       mullion: makeMullion(),
+      railing: makeMullion(),
     }),
     [profile.transmission],
   );
-  useRegisterMaterial([mats.slab, mats.wall, mats.glass, mats.mullion]);
+  useRegisterMaterial([mats.slab, mats.wall, mats.glass, mats.mullion, mats.railing]);
   return (
     <>
       <mesh geometry={geos.slab} material={mats.slab} receiveShadow castShadow />
       <mesh geometry={geos.walls} material={mats.wall} receiveShadow castShadow />
       <mesh geometry={geos.balconies} material={mats.slab} castShadow />
+      <mesh geometry={geos.railings} material={mats.railing} castShadow />
       <mesh geometry={geos.mullions} material={mats.mullion} />
       <mesh geometry={geos.glass} material={mats.glass} />
     </>

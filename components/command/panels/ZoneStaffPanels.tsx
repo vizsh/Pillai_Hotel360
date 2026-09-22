@@ -9,7 +9,7 @@ import { deptColors } from "@/lib/twin/colors";
 import { fmtClock } from "@/lib/sim/engine";
 import { Button, Meter, Provenance, Section, Sparkline, Stat, Tag } from "@/components/ui/primitives";
 import { cn, fmtINR } from "@/lib/utils";
-import { executeRecommendation } from "@/lib/sim/actions";
+import { acceptRecommendation } from "@/lib/api/recommendationActions";
 
 export function ZonePanel({ id }: { id: string }) {
   const { state, mutate } = useSim();
@@ -30,7 +30,7 @@ export function ZonePanel({ id }: { id: string }) {
         </p>
       </header>
       {isStore ? (
-        <Section title="Inventory" right={<Provenance kind="modeled" />}>
+        <Section title="Inventory" right={<Provenance kind="modeled" module="inventory" />}>
           <div className="flex flex-col gap-1.5">
             {items.map((it) => {
               const a = assessInventory(it, occFactor);
@@ -53,7 +53,7 @@ export function ZonePanel({ id }: { id: string }) {
                       ROP {a.reorderPoint} · EOQ {a.eoq} · lead {it.leadDays}d{it.onOrder ? ` · ${it.onOrder} on order` : ""}
                     </span>
                     {rec?.status === "pending" && (
-                      <Button size="sm" variant="primary" className="h-6 px-2 text-[10.5px]" onClick={() => mutate((s) => executeRecommendation(s, model, s.recommendations[rec.id]))}>
+                      <Button size="sm" variant="primary" className="h-6 px-2 text-[10.5px]" onClick={() => acceptRecommendation(mutate, model, rec)}>
                         Order {rec.payload?.qty as number}
                       </Button>
                     )}

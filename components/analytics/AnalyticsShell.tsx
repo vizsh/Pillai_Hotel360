@@ -8,6 +8,7 @@ import { useSim } from "@/store/sim";
 import { useSimLoop } from "@/hooks/useSimLoop";
 import { fmtClock } from "@/lib/sim/engine";
 import { Button, Provenance } from "@/components/ui/primitives";
+import { MethodologyPanel } from "@/components/command/MethodologyPanel";
 import { cn } from "@/lib/utils";
 
 export const routes = [
@@ -19,6 +20,8 @@ export const routes = [
   { href: "/energy", label: "Energy" },
   { href: "/sentiment", label: "Sentiment" },
   { href: "/concierge", label: "Concierge" },
+  { href: "/integrations", label: "Integrations" },
+  { href: "/history", label: "History" },
 ];
 
 export function AnalyticsShell({ title, subtitle, children }: { title: string; subtitle: string; children: React.ReactNode }) {
@@ -29,7 +32,7 @@ export function AnalyticsShell({ title, subtitle, children }: { title: string; s
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
   return (
-    <div className="flex h-full flex-col overflow-hidden bg-void">
+    <div className="relative flex h-full flex-col overflow-hidden bg-void">
       <header className="flex h-12 shrink-0 items-center gap-3 border-b border-stroke px-4">
         <Link href="/command" className="flex items-center gap-2 text-[12.5px] text-mid hover:text-hi">
           <Box size={14} className="text-accent" />
@@ -67,6 +70,7 @@ export function AnalyticsShell({ title, subtitle, children }: { title: string; s
           {mounted ? children : <div className="h-[60vh] animate-pulse rounded-xl border border-stroke bg-deep/40" />}
         </div>
       </main>
+      <MethodologyPanel />
     </div>
   );
 }

@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { subscribeWithSelector } from "zustand/middleware";
 import { getModel } from "@/lib/architecture/model";
 import { injectScenario } from "@/lib/sim/actions";
+import { logAction } from "@/lib/api/backend";
 import { useSim } from "./sim";
 import { useTwin } from "./twin";
 import { useTrace } from "./trace";
@@ -37,7 +38,12 @@ export const useDirector = create<DirectorState>()(subscribeWithSelector((set, g
     const asset = model.assetById.get(assetId);
     if (!asset) return;
 
-    useSim.getState().mutate((s) => injectScenario(s, model, assetId));
+    let t = 0;
+    useSim.getState().mutate((s) => {
+      t = s.t;
+      injectScenario(s, model, assetId);
+    });
+    logAction({ type: "scenario.injected", module: "maintenance", summary: `Demo fault injected — ${asset.name}`, payload: { assetId }, t });
     set({ stage: "injected", assetId, narration: `Fault injected — ${asset.name} offline`, spotlightRecId: null });
     useTwin.getState().select({ kind: "asset", id: assetId });
 

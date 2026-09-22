@@ -1,0 +1,41 @@
+import type { ResortModel } from "@/lib/architecture/types";
+import type { Recommendation, SimState } from "@/lib/sim/types";
+import { executeRecommendation, dismissRecommendation } from "@/lib/sim/actions";
+import { logAction } from "./backend";
+
+type Mutate = (fn: (s: SimState) => void) => void;
+
+/** Every "Accept"/"Dismiss" button across the app (recommendation dock, and 6 analytics
+ * pages) goes through these two functions instead of calling mutate(...) directly, so the
+ * audit log (app/api/actions, backed by a real SQLite table) has exactly one, complete
+ * record of every decision — not a partial one some call sites forgot to log. */
+
+export function acceptRecommendation(mutate: Mutate, model: ResortModel, rec: Recommendation) {
+  let t = rec.createdAt;
+  let applied = false;
+  mutate((s) => {
+    t = s.t;
+    // The module-refresh cadence (every 30 sim-minutes) can prune a stale recommendation
+    // out of state between when this card rendered and when the click actually lands —
+    // s.recommendations[rec.id] would then be undefined, and executeRecommendation
+    // dereferences .status on it unconditionally. Guard here rather than let that throw.
+    const live = s.recommendations[rec.id];
+    if (!live) return;
+    executeRecommendation(s, model, live);
+    applied = true;
+  });
+  if (applied) logAction({ type: "recommendation.accepted", module: rec.module, summary: rec.title, payload: { id: rec.id, confidence: rec.confidence, impact: rec.impact, action: rec.action }, t });
+}
+
+export function dismissRecommendationLogged(mutate: Mutate, rec: Recommendation) {
+  let t = rec.createdAt;
+  let applied = false;
+  mutate((s) => {
+    t = s.t;
+    const live = s.recommendations[rec.id];
+    if (!live) return;
+    dismissRecommendation(s, live);
+    applied = true;
+  });
+  if (applied) logAction({ type: "recommendation.dismissed", module: rec.module, summary: rec.title, payload: { id: rec.id }, t });
+}

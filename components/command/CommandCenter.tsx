@@ -13,6 +13,8 @@ import { BottomDock } from "./BottomDock";
 import { ConciergeDock } from "./ConciergeDock";
 import { LoadingOverlay, Palette, HelpSheet } from "./Overlays";
 import { DirectorCaptions } from "./DirectorCaptions";
+import { MethodologyPanel } from "./MethodologyPanel";
+import { Onboarding } from "./Onboarding";
 import { cn } from "@/lib/utils";
 
 const TwinCanvas = dynamic(() => import("@/components/twin/TwinCanvas").then((m) => m.TwinCanvas), { ssr: false });
@@ -98,6 +100,8 @@ export function CommandCenter() {
         <HelpSheet />
         <LoadingOverlay />
         <DirectorCaptions />
+        <MethodologyPanel />
+        <Onboarding />
       </div>
     </div>
   );

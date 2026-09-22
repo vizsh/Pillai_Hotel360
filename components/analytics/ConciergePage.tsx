@@ -171,7 +171,7 @@ export function ConciergePage() {
           </form>
         </Card>
 
-        <Card title="Classification log" right={<Provenance />} className="col-span-4">
+        <Card title="Classification log" right={<Provenance module="concierge" />} className="col-span-4">
           <div className="scrollbar-thin flex max-h-[560px] flex-col gap-1 overflow-y-auto">
             {log.length === 0 && <p className="text-[12px] text-low">No messages classified yet.</p>}
             {log.map((m) => {

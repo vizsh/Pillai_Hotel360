@@ -10,7 +10,7 @@ import { useTrace } from "@/store/trace";
 import { getModel } from "@/lib/architecture/model";
 import { aspectSummary, scoreText } from "@/lib/intelligence/sentiment";
 import { worstAssetForRoom } from "@/lib/twin/trace";
-import { executeRecommendation } from "@/lib/sim/actions";
+import { acceptRecommendation } from "@/lib/api/recommendationActions";
 import { fmtClock } from "@/lib/sim/engine";
 import { AnalyticsShell, Card, chartTheme } from "./AnalyticsShell";
 import { Button, Provenance, Stat, Tag } from "@/components/ui/primitives";
@@ -41,7 +41,7 @@ export function SentimentPage() {
       </div>
 
       <div className="grid grid-cols-3 gap-4">
-        <Card title="Aspect scores · trailing 7 days" right={<Provenance kind="derived" />} className="col-span-2">
+        <Card title="Aspect scores · trailing 7 days" right={<Provenance kind="derived" module="sentiment" />} className="col-span-2">
           <ResponsiveContainer width="100%" height={260}>
             <BarChart data={summary.map((a) => ({ aspect: a.aspect, score: +a.score.toFixed(2), mentions: a.mentions }))} layout="vertical" barCategoryGap={6}>
               <CartesianGrid stroke={chartTheme.grid} strokeDasharray="2 4" horizontal={false} />
@@ -120,7 +120,7 @@ export function SentimentPage() {
                     <p className="mt-1 text-[11px] text-mid">{r.body}</p>
                     <p className="mt-1 text-[10.5px] text-low">{r.action}</p>
                     <div className="mt-2 flex gap-1.5">
-                      <Button size="sm" variant="primary" onClick={() => mutate((s) => executeRecommendation(s, model, s.recommendations[r.id]))}>
+                      <Button size="sm" variant="primary" onClick={() => acceptRecommendation(mutate, model, r)}>
                         Open quality action
                       </Button>
                       {candidate && (
