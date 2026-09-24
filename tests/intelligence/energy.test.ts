@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { assessEnergyWaste, energyRecommendations } from "@/lib/intelligence/energy";
+import { assessEnergyWaste, assessSustainability, energyRecommendations } from "@/lib/intelligence/energy";
 import { makeState } from "../helpers";
 
 describe("assessEnergyWaste", () => {
@@ -83,5 +83,52 @@ describe("energyRecommendations", () => {
     expect((rec!.payload!.roomIds as string[]).length).toBeGreaterThanOrEqual(4);
     expect(rec!.confidence).toBeGreaterThan(0);
     expect(rec!.confidence).toBeLessThanOrEqual(1);
+  });
+});
+
+describe("assessSustainability", () => {
+  it("scores 100 when there is no identifiable waste to manage", () => {
+    const { state, model } = makeState();
+    for (const r of Object.values(state.rooms)) {
+      r.energyManaged = false;
+      r.ecoMode = false;
+      if (!r.guestId) r.conditioned = false;
+    }
+    const s = assessSustainability(state, model);
+    expect(s.sustainabilityScore).toBe(100);
+  });
+
+  it("reports a lower score when identifiable waste exists but isn't yet managed", () => {
+    const { state, model } = makeState();
+    for (const r of Object.values(state.rooms)) {
+      r.energyManaged = false;
+      r.ecoMode = false;
+      if (!r.guestId) r.conditioned = false;
+    }
+    const clean = model.rooms.filter((r) => !state.rooms[r.id].guestId).slice(0, 3);
+    for (const r of clean) {
+      state.rooms[r.id].conditioned = true;
+      state.rooms[r.id].status = "vacant-clean";
+    }
+    const s = assessSustainability(state, model);
+    expect(s.sustainabilityScore).toBeLessThan(100);
+    expect(s.sustainabilityScore).toBeGreaterThanOrEqual(0);
+  });
+
+  it("derives carbon and carbon-avoided directly from the energy KPIs at a fixed emission factor", () => {
+    const { state, model } = makeState();
+    state.kpis.energyToday = 100;
+    state.kpis.energySavedToday = 20;
+    const s = assessSustainability(state, model);
+    expect(s.carbonKgToday).toBeCloseTo(71, 5);
+    expect(s.carbonAvoidedKgToday).toBeCloseTo(14.2, 5);
+  });
+
+  it("scales water estimate with occupied room count, and never goes negative", () => {
+    const { state, model } = makeState();
+    const occBefore = Object.values(state.rooms).filter((r) => r.guestId).length;
+    const before = assessSustainability(state, model);
+    expect(before.waterLitersToday).toBeCloseTo(occBefore * 350, 5);
+    expect(before.waterLitersToday).toBeGreaterThanOrEqual(0);
   });
 });

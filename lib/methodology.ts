@@ -68,9 +68,9 @@ export const methodology: Record<ModuleId, MethodologyEntry> = {
   },
   energy: {
     file: "lib/intelligence/energy.ts",
-    benchmark: "Hotel rooms sit vacant ~60–70% of the time yet draw 60–80% of occupied-room HVAC cost while empty — a 35–40% pure-waste band. Occupancy-based conditioning recovers 20–35% of HVAC spend industry-wide.",
-    source: "ENERGY STAR; hotel HVAC energy-management studies, 2025–2026",
-    realWorldNote: "The 'guest checked in but away' signal already runs on a documented camera-presence contract — see /integrations.",
+    benchmark: "Hotel rooms sit vacant ~60–70% of the time yet draw 60–80% of occupied-room HVAC cost while empty — a 35–40% pure-waste band. Occupancy-based conditioning recovers 20–35% of HVAC spend industry-wide. Carbon uses CEA's provisional India grid emission factor (0.71 kgCO2/kWh, FY2024-25, Version 21.0); water uses the 300-400L/occupied-room-night range Indian resorts report, midpoint 350L.",
+    source: "ENERGY STAR; hotel HVAC energy-management studies, 2025–2026; CEA CO2 Baseline Database v21.0 (Dec 2025); Indian hotel water-consumption benchmarking",
+    realWorldNote: "The 'guest checked in but away' signal already runs on a documented camera-presence contract — see /integrations. Water has no per-tick simulation behind it (unlike energy) — it's a same-day estimate from current occupancy, not an accumulating meter; a real deployment would replace it with actual sub-metering.",
   },
   groupblock: {
     file: "lib/intelligence/groupBlocks.ts",

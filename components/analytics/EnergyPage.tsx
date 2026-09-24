@@ -5,7 +5,7 @@ import { Leaf, Camera } from "lucide-react";
 import { useSim } from "@/store/sim";
 import { useTwin } from "@/store/twin";
 import { getModel } from "@/lib/architecture/model";
-import { assessEnergyWaste } from "@/lib/intelligence/energy";
+import { assessEnergyWaste, assessSustainability } from "@/lib/intelligence/energy";
 import { acceptRecommendation, dismissRecommendationLogged } from "@/lib/api/recommendationActions";
 import type { Recommendation } from "@/lib/sim/types";
 import { AnalyticsShell, Card } from "./AnalyticsShell";
@@ -39,6 +39,7 @@ export function EnergyPage() {
   const { state, mutate } = useSim();
   const model = getModel();
   const a = assessEnergyWaste(state, model);
+  const sustainability = assessSustainability(state, model);
   const vacantRec = state.recommendations["rec-energy-vacant-conditioning"];
   const awayRec = state.recommendations["rec-energy-away-mode"];
   const savedToday = state.kpis.energySavedToday;
@@ -55,6 +56,23 @@ export function EnergyPage() {
         <Stat label="Rooms under management" value={String(a.managedCount + a.ecoCount)} accent="var(--accent)" />
         <Stat label="Saved today" value={`₹${Math.round(savedToday * COST_PER_KWH).toLocaleString("en-IN")}`} sub={`${savedToday.toFixed(1)} kWh`} accent="var(--accent)" />
       </div>
+
+      <Card title="Sustainability scorecard" right={<Provenance kind="derived" module="energy" />}>
+        <p className="mb-3 text-[11.5px] text-mid">
+          A guest-facing trust signal, not just an internal meter — how much of today&apos;s identifiable HVAC waste is already under active management, plus the carbon and water footprint that implies.
+        </p>
+        <div className="grid grid-cols-4 gap-4">
+          <Stat
+            label="Sustainability score"
+            value={String(sustainability.sustainabilityScore)}
+            sub="waste already managed"
+            accent={sustainability.sustainabilityScore >= 70 ? "var(--positive)" : sustainability.sustainabilityScore >= 40 ? "var(--warm)" : "var(--critical)"}
+          />
+          <Stat label="Carbon today" value={`${sustainability.carbonKgToday.toFixed(0)} kg CO₂`} sub={`${sustainability.carbonAvoidedKgToday.toFixed(0)} kg avoided`} accent="var(--positive)" />
+          <Stat label="Water today" value={`${(sustainability.waterLitersToday / 1000).toFixed(1)} m³`} sub="350L / occupied room, Indian resort benchmark" />
+          <Stat label="Savings today" value={`₹${Math.round(sustainability.savingsInrToday).toLocaleString("en-IN")}`} accent="var(--positive)" />
+        </div>
+      </Card>
 
       <Card title="Recommendations" right={<Provenance kind="modeled" module="energy" />}>
         {anyPending ? (

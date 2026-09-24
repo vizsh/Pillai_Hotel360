@@ -17,6 +17,15 @@ const MIN_CANDIDATES = 3;
 const MIN_AWAY_CANDIDATES = 2;
 /** Camera presence confidence below which a PMS-occupied room reads as "guest out." */
 const AWAY_THRESHOLD = 0.15;
+/** kgCO2/kWh — CEA's provisional India grid-average emission factor, FY2024-25 (Version 21.0,
+ * Dec 2025; WebSearch-verified this session), used to turn the energy meter into a real
+ * carbon figure instead of a made-up "green" multiplier. */
+const GRID_EMISSION_FACTOR_KG_PER_KWH = 0.71;
+/** Liters per occupied room per day — Indian resorts report 300-400L/room-night across
+ * showers, pool top-up and laundry (WebSearch-verified this session); 350 is the midpoint.
+ * Not tied to any per-tick water simulation — there isn't one — so this is a daily estimate
+ * from current occupancy, not an accumulated meter like energyToday. */
+const WATER_L_PER_OCCUPIED_ROOM_DAY = 350;
 
 export interface EnergyWasteAssessment {
   candidates: RoomState[];
@@ -111,4 +120,32 @@ export function energyRecommendations(state: SimState, model: ResortModel): Reco
   }
 
   return out;
+}
+
+export interface SustainabilityScorecard {
+  carbonKgToday: number;
+  carbonAvoidedKgToday: number;
+  waterLitersToday: number;
+  savingsInrToday: number;
+  /** 0-100: what share of currently-identifiable HVAC waste (vacant-conditioned + away-but-
+   * conditioned rooms) is already under active management — 100 means every waste
+   * opportunity this module can see is already being acted on, not "energy use is low." */
+  sustainabilityScore: number;
+}
+
+/** The blueprint's Module 12 unique-edge trio: a carbon estimate, a rupee savings tracker,
+ * and a guest-facing sustainability score — all derived from meters this codebase already
+ * runs (state.kpis.energyToday/energySavedToday, assessEnergyWaste's own candidate counts),
+ * not a second, separate sustainability simulation. */
+export function assessSustainability(state: SimState, model: ResortModel): SustainabilityScorecard {
+  const a = assessEnergyWaste(state, model);
+  const occupied = Object.values(state.rooms).filter((r) => r.guestId).length;
+  const totalIdentifiable = a.managedCount + a.ecoCount + a.candidates.length + a.awayCandidates.length;
+  return {
+    carbonKgToday: state.kpis.energyToday * GRID_EMISSION_FACTOR_KG_PER_KWH,
+    carbonAvoidedKgToday: state.kpis.energySavedToday * GRID_EMISSION_FACTOR_KG_PER_KWH,
+    waterLitersToday: occupied * WATER_L_PER_OCCUPIED_ROOM_DAY,
+    savingsInrToday: state.kpis.energySavedToday * COST_PER_KWH,
+    sustainabilityScore: totalIdentifiable > 0 ? Math.round(((a.managedCount + a.ecoCount) / totalIdentifiable) * 100) : 100,
+  };
 }
