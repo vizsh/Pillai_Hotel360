@@ -8,6 +8,7 @@ import { getModel } from "@/lib/architecture/model";
 import { segmentGuests, guestVector, featureNames } from "@/lib/intelligence/segmentation";
 import { nextBestActions } from "@/lib/intelligence/personalization";
 import { assessGuestRisk } from "@/lib/intelligence/guestRecovery";
+import { resortExperienceIndex } from "@/lib/intelligence/guestExperience";
 import { applyNextBestAction } from "@/lib/sim/actions";
 import { acceptRecommendation } from "@/lib/api/recommendationActions";
 import { AnalyticsShell, Card, chartTheme } from "./AnalyticsShell";
@@ -33,6 +34,8 @@ export function GuestsPage() {
   const segCounts = ["leisure-couple", "family", "business", "luxury", "group"].map((s) => ({ s, n: guests.filter((g) => g.segment === s).length }));
   const atRisk = assessGuestRisk(state, model);
   const recoveryRecs = new Map(Object.values(state.recommendations).filter((r) => r.module === "recovery" && r.status === "pending").map((r) => [r.payload?.guestId as string, r]));
+  const gei = resortExperienceIndex(state);
+  const bandColor: Record<string, string> = { excellent: "var(--positive)", good: "var(--accent)", "at-risk": "var(--warm)", poor: "var(--critical)" };
 
   return (
     <AnalyticsShell title="Guest Intelligence" subtitle="k-means behavioral segmentation over in-house guests, with a per-guest next-best-action ranking derived from preferences, loyalty and stay stage.">
@@ -44,6 +47,34 @@ export function GuestsPage() {
         <Stat label="Avg spend / guest" value={fmtINR(guests.reduce((s, g) => s + g.spendRoom + g.spendFnb + g.spendSpa + g.spendOther, 0) / Math.max(1, guests.length))} />
         <Stat label="Ancillary revenue today" value={fmtINR(state.kpis.ancillaryRevenueToday)} sub="from accepted NBAs" accent="var(--positive)" />
       </div>
+
+      <Card title="Guest Experience Index" right={<Provenance kind="derived" />}>
+        <p className="mb-3 text-[11.5px] text-mid">
+          One composite score per guest — sentiment (40%), service SLA hit-rate (25%), ancillary engagement relative to their own segment&apos;s typical spend (20%), and loyalty tenure (15%). Rolls up sentiment, operations and revenue into the single number a GM actually wants, instead of three separate module dashboards.
+        </p>
+        <div className="grid grid-cols-5 gap-3">
+          <Stat label="Resort GEI" value={(gei.avgIndex * 100).toFixed(0)} accent={gei.avgIndex >= 0.55 ? "var(--positive)" : "var(--warm)"} />
+          {(["excellent", "good", "at-risk", "poor"] as const).map((band) => (
+            <Stat key={band} label={band} value={String(gei.bandCounts[band])} accent={bandColor[band]} />
+          ))}
+        </div>
+        {gei.scores.filter((s) => s.band === "poor" || s.band === "at-risk").length > 0 && (
+          <div className="mt-3 flex flex-col gap-1 border-t border-stroke/60 pt-3">
+            {gei.scores
+              .filter((s) => s.band === "poor" || s.band === "at-risk")
+              .slice(0, 5)
+              .map((s) => (
+                <button key={s.guestId} onClick={() => s.roomId && useTwin.getState().select({ kind: "room", id: s.roomId })} className="flex items-center gap-2 rounded px-1 py-0.5 text-left hover:bg-white/5">
+                  <span className="w-32 truncate text-[11.5px] text-mid">{s.guestName}</span>
+                  <div className="relative h-1.5 flex-1 rounded-full bg-white/5">
+                    <div className="absolute left-0 top-0 h-full rounded-full" style={{ width: `${s.index * 100}%`, background: bandColor[s.band] }} />
+                  </div>
+                  <span className="mono w-8 text-right text-[10.5px] text-low">{(s.index * 100).toFixed(0)}</span>
+                </button>
+              ))}
+          </div>
+        )}
+      </Card>
 
       <div className="grid grid-cols-3 gap-4">
         <Card title="Segments · spend/night vs lead time" right={<Provenance kind="modeled" module="segmentation" />} className="col-span-2">

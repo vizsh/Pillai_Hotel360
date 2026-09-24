@@ -40,6 +40,13 @@ export function segmentFor(r: Rand, scenario: Scenario): Segment {
   return "leisure-couple";
 }
 
+/** Relative ancillary-spend intensity by segment — the single source of truth for how much
+ * a segment "typically" spends, read both when generating a guest's actual spend below and
+ * by lib/intelligence/guestExperience.ts's engagement benchmark, so "high engagement for a
+ * business traveller" and "high engagement for a luxury guest" mean different, honest things
+ * rather than sharing one flat number. */
+export const SEGMENT_SPEND_MULTIPLIER: Record<Segment, number> = { "leisure-couple": 1.0, family: 1.2, business: 0.8, luxury: 2.4, group: 0.7 };
+
 export function makeGuest(r: Rand, id: string, roomId: string | null, t: number, scenario: Scenario, seaView: boolean, type: string): Guest {
   const segment = segmentFor(r, scenario);
   const nights = segment === "business" ? randInt(r, 1, 3) : segment === "luxury" ? randInt(r, 3, 7) : randInt(r, 2, 5);
@@ -47,7 +54,7 @@ export function makeGuest(r: Rand, id: string, roomId: string | null, t: number,
   const checkIn = t - alreadyIn * DAY - randInt(r, 0, 8) * HOUR;
   const loyaltyRoll = r();
   const loyalty = segment === "luxury" ? (loyaltyRoll < 0.5 ? "platinum" : "gold") : loyaltyRoll < 0.55 ? "none" : loyaltyRoll < 0.8 ? "silver" : loyaltyRoll < 0.95 ? "gold" : "platinum";
-  const baseSpend = { "leisure-couple": 1.0, family: 1.2, business: 0.8, luxury: 2.4, group: 0.7 }[segment];
+  const baseSpend = SEGMENT_SPEND_MULTIPLIER[segment];
   const prefs = new Set<string>();
   const nPrefs = randInt(r, 1, 4);
   while (prefs.size < nPrefs) prefs.add(pick(r, prefPool));
