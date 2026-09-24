@@ -8,7 +8,7 @@ import { useSim } from "@/store/sim";
 import { useTwin } from "@/store/twin";
 import { useTrace } from "@/store/trace";
 import { getModel } from "@/lib/architecture/model";
-import { aspectSummary, scoreText } from "@/lib/intelligence/sentiment";
+import { aspectSummary, rootCauseLink, scoreText } from "@/lib/intelligence/sentiment";
 import { worstAssetForRoom } from "@/lib/twin/trace";
 import { acceptRecommendation } from "@/lib/api/recommendationActions";
 import { fmtClock } from "@/lib/sim/engine";
@@ -145,29 +145,37 @@ export function SentimentPage() {
         </Card>
       </div>
 
-      <Card title={`Review stream (${reviews.length})`}>
+      <Card title={`Review stream (${reviews.length})`} right={<Provenance kind="derived" module="sentiment" />}>
         <div className="scrollbar-thin grid max-h-[420px] grid-cols-2 gap-2 overflow-y-auto">
-          {reviews.slice(0, 40).map((r) => (
-            <div key={r.id} className="rounded-lg border border-stroke bg-white/[0.02] p-3">
-              <div className="flex items-center justify-between">
-                <span className="mono text-[12px] text-warm">{"★".repeat(r.rating)}<span className="text-low">{"★".repeat(5 - r.rating)}</span></span>
-                <span className="mono text-[10px] text-low">
-                  {r.source} · {fmtClock(r.createdAt)} ·{" "}
-                  <Link href="/command" onClick={() => useTwin.getState().select({ kind: "room", id: r.roomId })} className="hover:text-accent">
-                    {model.roomById.get(r.roomId)?.number}
-                  </Link>
-                </span>
-              </div>
-              <p className="mt-1 text-[12px] leading-snug text-mid">{r.text}</p>
-              <div className="mt-1.5 flex flex-wrap gap-1">
-                {Object.entries(r.aspects).map(([a, s]) => (
-                  <span key={a} className={cn("rounded px-1.5 py-0.5 text-[10px]", s < 0 ? "bg-critical/10 text-critical" : "bg-positive/10 text-positive")}>
-                    {a} {s >= 0 ? "+" : ""}{s.toFixed(1)}
+          {reviews.slice(0, 40).map((r) => {
+            const link = rootCauseLink(r, state);
+            return (
+              <div key={r.id} className="rounded-lg border border-stroke bg-white/[0.02] p-3">
+                <div className="flex items-center justify-between">
+                  <span className="mono text-[12px] text-warm">{"★".repeat(r.rating)}<span className="text-low">{"★".repeat(5 - r.rating)}</span></span>
+                  <span className="mono text-[10px] text-low">
+                    {r.source} · {fmtClock(r.createdAt)} ·{" "}
+                    <Link href="/command" onClick={() => useTwin.getState().select({ kind: "room", id: r.roomId })} className="hover:text-accent">
+                      {model.roomById.get(r.roomId)?.number}
+                    </Link>
                   </span>
-                ))}
+                </div>
+                <p className="mt-1 text-[12px] leading-snug text-mid">{r.text}</p>
+                <div className="mt-1.5 flex flex-wrap gap-1">
+                  {Object.entries(r.aspects).map(([a, s]) => (
+                    <span key={a} className={cn("rounded px-1.5 py-0.5 text-[10px]", s < 0 ? "bg-critical/10 text-critical" : "bg-positive/10 text-positive")}>
+                      {a} {s >= 0 ? "+" : ""}{s.toFixed(1)}
+                    </span>
+                  ))}
+                </div>
+                {link && (
+                  <p className={cn("mono mt-1.5 text-[10px]", link.slaBreached ? "text-critical" : "text-low")}>
+                    Linked: {link.request.type} ticket {link.request.id} · {link.request.status === "done" ? `closed after ${Math.round(link.delayMinutes)}m` : `open ${Math.round(link.delayMinutes)}m`} (SLA {link.request.slaMin}m){link.slaBreached ? " · SLA breached" : ""}
+                  </p>
+                )}
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </Card>
     </AnalyticsShell>

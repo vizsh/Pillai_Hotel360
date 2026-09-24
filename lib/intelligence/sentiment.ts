@@ -1,5 +1,5 @@
 import type { ResortModel } from "@/lib/architecture/types";
-import type { Recommendation, Review, SimState } from "@/lib/sim/types";
+import type { Recommendation, RequestType, Review, ServiceRequest, SimState } from "@/lib/sim/types";
 import { aspectLexicon, negations, negativeWords, positiveWords } from "@/lib/sim/text";
 import { clamp } from "@/lib/utils";
 
@@ -33,6 +33,51 @@ export function scoreText(text: string): { overall: number; aspects: Record<stri
     overall: n ? clamp(total / n, -1, 1) : 0,
     aspects: Object.fromEntries(Object.entries(aspects).map(([k, v]) => [k, v.sum / v.n])),
   };
+}
+
+/** Aspects with a request type a review's complaint can be deterministically traced to —
+ * only the aspects where the lexicon's dept maps onto a real, dispatchable RequestType.
+ * "service"/"value"/"noise" have no single matching request type and are left unlinked
+ * rather than guessed at. */
+const ASPECT_REQUEST_TYPE: Partial<Record<string, RequestType>> = {
+  hvac: "maintenance",
+  facilities: "maintenance",
+  cleanliness: "housekeeping",
+  room: "housekeeping",
+  food: "fnb",
+};
+/** How far back from the review a causal request can plausibly sit — long enough to cover a
+ * multi-day stay's most recent incident, short enough that "linked" still means something. */
+const ROOT_CAUSE_WINDOW_MIN = 3 * 24 * 60;
+
+export interface RootCauseLink {
+  request: ServiceRequest;
+  aspect: string;
+  delayMinutes: number;
+  slaBreached: boolean;
+}
+
+/** Matches a negative review to the specific ServiceRequest that plausibly caused it — the
+ * blueprint's own headline example ("AC not working" → ticket #482 open 6 hours). Picks
+ * the review's most negative linkable aspect, then the most recent same-room request of the
+ * matching type created before the review. Best-effort: lib/sim/engine.ts prunes completed
+ * requests 6h after completion, so a request from early in a long stay may already be gone
+ * by checkout — this only ever surfaces a link that's still findable, never fabricates one. */
+export function rootCauseLink(review: Review, state: SimState): RootCauseLink | null {
+  const candidates = Object.entries(review.aspects)
+    .filter(([aspect, score]) => score < -0.15 && ASPECT_REQUEST_TYPE[aspect])
+    .sort((a, b) => a[1] - b[1]);
+  for (const [aspect] of candidates) {
+    const reqType = ASPECT_REQUEST_TYPE[aspect]!;
+    const matches = Object.values(state.requests).filter(
+      (r) => r.roomId === review.roomId && r.type === reqType && r.createdAt <= review.createdAt && review.createdAt - r.createdAt < ROOT_CAUSE_WINDOW_MIN,
+    );
+    if (!matches.length) continue;
+    const request = matches.sort((a, b) => b.createdAt - a.createdAt)[0];
+    const delayMinutes = (request.completedAt ?? state.t) - request.createdAt;
+    return { request, aspect, delayMinutes, slaBreached: delayMinutes > request.slaMin };
+  }
+  return null;
 }
 
 export interface AspectSummary {
