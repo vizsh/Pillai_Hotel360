@@ -25,6 +25,7 @@ function stubGuest(id: string, roomId: string, overrides: Partial<Guest> = {}): 
     sentiment: 0,
     vip: false,
     stays: 1,
+    consentPersonalization: true,
     ...overrides,
   };
 }

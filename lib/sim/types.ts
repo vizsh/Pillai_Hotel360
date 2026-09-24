@@ -57,6 +57,11 @@ export interface Guest {
   sentiment: number;
   vip: boolean;
   stays: number;
+  /** DPDP-style consent for preference/history-driven personalization (default true, some
+   * guests opt out — see lib/sim/seed.ts). False means lib/intelligence/personalization.ts
+   * must not target this guest with prefs/spend-driven offers, only generic, non-profiled
+   * actions — purpose limitation, not just a UI label. */
+  consentPersonalization: boolean;
 }
 
 export type Dept = "housekeeping" | "engineering" | "fnb" | "frontdesk" | "spa" | "security" | "concierge";

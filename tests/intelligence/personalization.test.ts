@@ -14,6 +14,37 @@ describe("nextBestActions", () => {
       }
     }
   });
+
+  it("never targets a preference/segment-driven upsell at a guest who opted out of personalization", () => {
+    const { state, model } = makeState("peak-season", 5);
+    const preferenceDrivenIds = new Set(["spa", "upgrade", "vip-welcome", "kids", "dinner", "rebook", "late-co", "transfer", "workspace"]);
+    for (const g of Object.values(state.guests)) {
+      if (g.consentPersonalization) continue;
+      for (const a of nextBestActions(g, state, model)) {
+        expect(preferenceDrivenIds.has(a.id)).toBe(false);
+      }
+    }
+  });
+
+  it("still offers service recovery to an opted-out guest with negative sentiment", () => {
+    const { state, model } = makeState();
+    const g = Object.values(state.guests).find((x) => x.roomId)!;
+    g.consentPersonalization = false;
+    g.sentiment = -0.5;
+    const actions = nextBestActions(g, state, model);
+    expect(actions.some((a) => a.id === "recovery")).toBe(true);
+  });
+
+  it("falls back to a generic courtesy call, never a targeted offer, for an opted-out guest with no service issue", () => {
+    const { state, model } = makeState();
+    const g = Object.values(state.guests).find((x) => x.roomId)!;
+    g.consentPersonalization = false;
+    g.sentiment = 0.5;
+    g.prefs = ["spa", "sea-view"];
+    const actions = nextBestActions(g, state, model);
+    expect(actions).toHaveLength(1);
+    expect(actions[0].id).toBe("check");
+  });
 });
 
 describe("applyNextBestAction", () => {

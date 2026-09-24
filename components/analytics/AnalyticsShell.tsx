@@ -3,12 +3,14 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Box, Pause, Play } from "lucide-react";
+import { Box, Lock, Pause, Play } from "lucide-react";
 import { useSim } from "@/store/sim";
+import { useSession } from "@/store/session";
 import { useSimLoop } from "@/hooks/useSimLoop";
 import { fmtClock } from "@/lib/sim/engine";
 import { Button, Provenance } from "@/components/ui/primitives";
 import { MethodologyPanel } from "@/components/command/MethodologyPanel";
+import { allowedRoutes, isRouteAllowed, ROLES, roleList } from "@/lib/rbac";
 import { cn } from "@/lib/utils";
 
 export const routes = [
@@ -30,6 +32,10 @@ export function AnalyticsShell({ title, subtitle, children }: { title: string; s
   const path = usePathname();
   const { state, setPaused, setSpeed } = useSim();
   useSim((s) => s.version);
+  const { role, setRole } = useSession();
+  const [roleMenuOpen, setRoleMenuOpen] = useState(false);
+  const visibleRoutes = allowedRoutes(role, routes);
+  const allowed = isRouteAllowed(role, path);
   const [mounted, setMounted] = useState(false);
   // Deliberate SSR-hydration gate, not an accidental effect: the sim store seeds
   // independently on the server and on the client (two separate module instances), so the
@@ -47,13 +53,36 @@ export function AnalyticsShell({ title, subtitle, children }: { title: string; s
         </Link>
         <span className="h-5 w-px bg-stroke" />
         <nav className="flex items-center gap-0.5">
-          {routes.map((r) => (
+          {visibleRoutes.map((r) => (
             <Link key={r.href} href={r.href} className={cn("rounded-md px-2.5 py-1.5 text-[12.5px]", path === r.href ? "bg-accent/15 text-accent" : "text-mid hover:text-hi")}>
               {r.label}
             </Link>
           ))}
         </nav>
         <div className="ml-auto flex items-center gap-2">
+          <div className="relative">
+            <button onClick={() => setRoleMenuOpen((v) => !v)} className="flex items-center gap-1.5 rounded-md border border-stroke bg-white/[0.02] px-2.5 py-1.5 text-[11.5px] text-mid hover:text-hi">
+              <Lock size={11} />
+              {ROLES[role].label}
+            </button>
+            {roleMenuOpen && (
+              <div className="absolute right-0 top-full z-20 mt-1 w-72 rounded-lg border border-stroke bg-deep p-1.5 shadow-xl">
+                {roleList.map((r) => (
+                  <button
+                    key={r}
+                    onClick={() => {
+                      setRole(r);
+                      setRoleMenuOpen(false);
+                    }}
+                    className={cn("flex w-full flex-col items-start gap-0.5 rounded-md px-2.5 py-2 text-left hover:bg-white/5", role === r && "bg-accent/10")}
+                  >
+                    <span className={cn("text-[12px]", role === r ? "text-accent" : "text-hi")}>{ROLES[r].label}</span>
+                    <span className="text-[10.5px] text-low">{ROLES[r].description}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
           <Provenance />
           <Button size="icon" variant="subtle" onClick={() => setPaused(!state.paused)}>
             {state.paused ? <Play size={13} /> : <Pause size={13} />}
@@ -74,7 +103,20 @@ export function AnalyticsShell({ title, subtitle, children }: { title: string; s
             <h1 className="font-display text-[28px] font-semibold tracking-tight">{title}</h1>
             <p className="mt-1 text-[13px] text-mid">{subtitle}</p>
           </div>
-          {mounted ? children : <div className="h-[60vh] animate-pulse rounded-xl border border-stroke bg-deep/40" />}
+          {!mounted ? (
+            <div className="h-[60vh] animate-pulse rounded-xl border border-stroke bg-deep/40" />
+          ) : !allowed ? (
+            <div className="flex h-[50vh] flex-col items-center justify-center gap-2 rounded-xl border border-stroke bg-deep/40 text-center">
+              <Lock size={22} className="text-low" />
+              <p className="text-[14px] text-hi">Restricted for {ROLES[role].label}</p>
+              <p className="max-w-sm text-[12px] text-mid">{ROLES[role].description}</p>
+              <Link href={visibleRoutes[0]?.href ?? "/command"} className="mt-1 text-[12px] text-accent hover:underline">
+                Go to {visibleRoutes[0]?.label ?? "Command Center"}
+              </Link>
+            </div>
+          ) : (
+            children
+          )}
         </div>
       </main>
       <MethodologyPanel />

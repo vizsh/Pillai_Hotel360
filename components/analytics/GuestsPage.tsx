@@ -3,7 +3,9 @@
 import Link from "next/link";
 import { CartesianGrid, ResponsiveContainer, Scatter, ScatterChart, Tooltip, XAxis, YAxis, ZAxis, Cell } from "recharts";
 import { useSim } from "@/store/sim";
+import { useSession } from "@/store/session";
 import { useTwin } from "@/store/twin";
+import { guestCue, ROLES } from "@/lib/rbac";
 import { getModel } from "@/lib/architecture/model";
 import { segmentGuests, guestVector, featureNames } from "@/lib/intelligence/segmentation";
 import { nextBestActions } from "@/lib/intelligence/personalization";
@@ -18,6 +20,8 @@ import { pushFeed } from "@/lib/sim/engine";
 
 export function GuestsPage() {
   const { state, mutate } = useSim();
+  const { role } = useSession();
+  const canSeeValue = ROLES[role].canViewGuestValue;
   const model = getModel();
   const clusters = segmentGuests(state, model);
   const guests = Object.values(state.guests).filter((g) => g.roomId);
@@ -44,9 +48,14 @@ export function GuestsPage() {
         <Stat label="VIP" value={String(guests.filter((g) => g.vip).length)} />
         <Stat label="Avg sentiment" value={(guests.reduce((s, g) => s + g.sentiment, 0) / Math.max(1, guests.length)).toFixed(2)} />
         <Stat label="At-risk (< −0.2)" value={String(guests.filter((g) => g.sentiment < -0.2).length)} accent="var(--critical)" />
-        <Stat label="Avg spend / guest" value={fmtINR(guests.reduce((s, g) => s + g.spendRoom + g.spendFnb + g.spendSpa + g.spendOther, 0) / Math.max(1, guests.length))} />
-        <Stat label="Ancillary revenue today" value={fmtINR(state.kpis.ancillaryRevenueToday)} sub="from accepted NBAs" accent="var(--positive)" />
+        <Stat label="Avg spend / guest" value={canSeeValue ? fmtINR(guests.reduce((s, g) => s + g.spendRoom + g.spendFnb + g.spendSpa + g.spendOther, 0) / Math.max(1, guests.length)) : "Restricted"} />
+        <Stat label="Ancillary revenue today" value={canSeeValue ? fmtINR(state.kpis.ancillaryRevenueToday) : "Restricted"} sub={canSeeValue ? "from accepted NBAs" : `not visible to ${ROLES[role].label}`} accent={canSeeValue ? "var(--positive)" : undefined} />
       </div>
+      {!canSeeValue && (
+        <p className="-mt-2 text-[11px] text-low">
+          Signed in as {ROLES[role].label}: {ROLES[role].description} Guest spend figures below are replaced with a redacted cue, per the PS&apos;s own privacy guidance.
+        </p>
+      )}
 
       <Card title="Guest Experience Index" right={<Provenance kind="derived" />}>
         <p className="mb-3 text-[11.5px] text-mid">
@@ -77,12 +86,16 @@ export function GuestsPage() {
       </Card>
 
       <div className="grid grid-cols-3 gap-4">
-        <Card title="Segments · spend/night vs lead time" right={<Provenance kind="modeled" module="segmentation" />} className="col-span-2">
+        <Card title={canSeeValue ? "Segments · spend/night vs lead time" : "Segments · party size vs lead time"} right={<Provenance kind="modeled" module="segmentation" />} className="col-span-2">
           <ResponsiveContainer width="100%" height={320}>
             <ScatterChart>
               <CartesianGrid stroke={chartTheme.grid} strokeDasharray="2 4" />
               <XAxis dataKey="lead" type="number" name="lead days" stroke={chartTheme.axis} fontSize={10} label={{ value: "lead days", fill: "#5b6879", fontSize: 10, position: "insideBottomRight", dy: 10 }} />
-              <YAxis dataKey="spend" type="number" name="spend/night" stroke={chartTheme.axis} fontSize={10} tickFormatter={(v) => `₹${(v / 1000).toFixed(0)}k`} />
+              {canSeeValue ? (
+                <YAxis dataKey="spend" type="number" name="spend/night" stroke={chartTheme.axis} fontSize={10} tickFormatter={(v) => `₹${(v / 1000).toFixed(0)}k`} />
+              ) : (
+                <YAxis dataKey="party" type="number" name="party size" stroke={chartTheme.axis} fontSize={10} />
+              )}
               <ZAxis dataKey="nights" range={[30, 220]} name="nights" />
               <Tooltip contentStyle={chartTheme.tooltip} cursor={{ strokeDasharray: "3 3" }} formatter={(v, n) => [n === "spend/night" ? fmtINR(Number(v)) : String(v), String(n)]} labelFormatter={() => ""} />
               <Scatter
@@ -123,7 +136,7 @@ export function GuestsPage() {
               <span className="mono text-[11px]" style={{ color: c.color }}>{c.size}</span>
             </div>
             <div className="mono mt-2 grid grid-cols-2 gap-1 text-[10.5px] text-low">
-              <span>spend/n</span><span className="text-right text-hi">{fmtINR(c.avgSpend)}</span>
+              <span>spend/n</span><span className="text-right text-hi">{canSeeValue ? fmtINR(c.avgSpend) : "—"}</span>
               <span>nights</span><span className="text-right text-hi">{c.avgNights.toFixed(1)}</span>
               <span>lead</span><span className="text-right text-hi">{c.avgLead.toFixed(0)}d</span>
               <span>sentiment</span><span className={cn("text-right", c.avgSentiment < 0 ? "text-critical" : "text-positive")}>{c.avgSentiment >= 0 ? "+" : ""}{c.avgSentiment.toFixed(2)}</span>
@@ -183,8 +196,9 @@ export function GuestsPage() {
                 <div className="truncate text-[11px] text-mid">{a.label}</div>
                 <div className="truncate text-[10px] text-low">
                   {a.reason}
-                  {a.revenueUplift > 0 && <span className="text-positive"> · +{fmtINR(a.revenueUplift)}</span>}
+                  {a.revenueUplift > 0 && canSeeValue && <span className="text-positive"> · +{fmtINR(a.revenueUplift)}</span>}
                 </div>
+                {!canSeeValue && <div className="truncate text-[10px] text-accent/80">{guestCue(g)}</div>}
               </div>
               <Button size="sm" variant="subtle" onClick={() => mutate((s) => applyNextBestAction(s, model, g.id, a))}>
                 Do it

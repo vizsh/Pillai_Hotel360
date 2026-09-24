@@ -29,17 +29,23 @@ export function nextBestActions(g: Guest, state: SimState, model: ResortModel): 
   const add = (id: string, label: string, score: number, reason: string, cost: number, uplift: number, revenueUplift = 0, spendCategory: SpendCategory = "none") =>
     actions.push({ id, label, score: clamp(score, 0, 1), reason, cost, uplift, revenueUplift, spendCategory });
 
+  // Service recovery is remedial, not targeted marketing — it stays available regardless of
+  // personalization consent (DPDP purpose limitation applies to profiling for offers, not to
+  // responding to a guest who's already unhappy).
   if (g.sentiment < -0.2) add("recovery", "Service recovery: manager call + F&B credit ₹1,500", 0.9 + (g.loyalty !== "none" ? 0.08 : 0), `sentiment ${g.sentiment.toFixed(2)}${g.loyalty !== "none" ? `, ${g.loyalty} member` : ""}`, 1500, 0.35);
-  if (g.prefs.includes("spa") && g.spendSpa === 0) add("spa", "Offer 20% spa credit for tomorrow morning", 0.62 + (g.segment === "luxury" ? 0.15 : 0), "spa preference on profile, no spa spend yet", 600, 0.22, 1800, "spa");
-  if (g.prefs.includes("sea-view") && room && !room.seaView) add("upgrade", "Complimentary sea-view move (inventory available)", Object.values(state.rooms).some((r) => r.status === "vacant-clean" && model.roomById.get(r.id)!.seaView) ? 0.78 : 0.2, "sea-view preference unmet in current room", 0, 0.3);
-  if (stage === "arrival" && g.vip) add("vip-welcome", "VIP welcome: champagne + GM note", 0.85, "VIP arrival stage", 2200, 0.2);
-  if (stage === "arrival" && g.segment === "family" && !g.prefs.includes("crib")) add("kids", "Send kids club schedule + pool cabana offer", 0.55, "family segment on arrival", 0, 0.12, 900, "fnb");
-  if (stage === "mid-stay" && hour >= 16 && hour <= 19) add("dinner", "Sky bar sunset table, 15% off for in-house", 0.5 + (g.segment === "leisure-couple" ? 0.2 : 0), "mid-stay, sunset window", 300, 0.15, 2200, "fnb");
-  if (stage === "departure" && g.sentiment > 0.3) add("rebook", "Rebook offer: 12% off next stay, valid 6 months", 0.7 + (g.loyalty === "none" ? 0.1 : 0), "positive sentiment near departure", 0, 0.28);
-  if (stage === "departure" && g.prefs.includes("late-checkout")) add("late-co", "Confirm complimentary 2pm checkout", 0.66, "late-checkout preference, departure stage", 0, 0.1);
-  if (g.prefs.includes("airport-transfer") && stage === "departure") add("transfer", "Pre-arrange airport transfer, confirm time", 0.6, "transfer preference, departure stage", 0, 0.08);
-  if (g.segment === "business" && stage === "mid-stay") add("workspace", "Offer conference lounge access + early breakfast", 0.48, "business segment mid-stay", 0, 0.1, 450, "fnb");
-  if (!actions.length) add("check", "Courtesy check-in call from front desk", 0.3, "no strong signals; maintain engagement", 0, 0.05);
+
+  if (g.consentPersonalization) {
+    if (g.prefs.includes("spa") && g.spendSpa === 0) add("spa", "Offer 20% spa credit for tomorrow morning", 0.62 + (g.segment === "luxury" ? 0.15 : 0), "spa preference on profile, no spa spend yet", 600, 0.22, 1800, "spa");
+    if (g.prefs.includes("sea-view") && room && !room.seaView) add("upgrade", "Complimentary sea-view move (inventory available)", Object.values(state.rooms).some((r) => r.status === "vacant-clean" && model.roomById.get(r.id)!.seaView) ? 0.78 : 0.2, "sea-view preference unmet in current room", 0, 0.3);
+    if (stage === "arrival" && g.vip) add("vip-welcome", "VIP welcome: champagne + GM note", 0.85, "VIP arrival stage", 2200, 0.2);
+    if (stage === "arrival" && g.segment === "family" && !g.prefs.includes("crib")) add("kids", "Send kids club schedule + pool cabana offer", 0.55, "family segment on arrival", 0, 0.12, 900, "fnb");
+    if (stage === "mid-stay" && hour >= 16 && hour <= 19) add("dinner", "Sky bar sunset table, 15% off for in-house", 0.5 + (g.segment === "leisure-couple" ? 0.2 : 0), "mid-stay, sunset window", 300, 0.15, 2200, "fnb");
+    if (stage === "departure" && g.sentiment > 0.3) add("rebook", "Rebook offer: 12% off next stay, valid 6 months", 0.7 + (g.loyalty === "none" ? 0.1 : 0), "positive sentiment near departure", 0, 0.28);
+    if (stage === "departure" && g.prefs.includes("late-checkout")) add("late-co", "Confirm complimentary 2pm checkout", 0.66, "late-checkout preference, departure stage", 0, 0.1);
+    if (g.prefs.includes("airport-transfer") && stage === "departure") add("transfer", "Pre-arrange airport transfer, confirm time", 0.6, "transfer preference, departure stage", 0, 0.08);
+    if (g.segment === "business" && stage === "mid-stay") add("workspace", "Offer conference lounge access + early breakfast", 0.48, "business segment mid-stay", 0, 0.1, 450, "fnb");
+  }
+  if (!actions.length) add("check", g.consentPersonalization ? "Courtesy check-in call from front desk" : "Courtesy check-in call from front desk (opted out of personalization — generic outreach only)", 0.3, g.consentPersonalization ? "no strong signals; maintain engagement" : "guest opted out of preference-based personalization", 0, 0.05);
   return actions.sort((a, b) => b.score - a.score).slice(0, 4);
 }
 

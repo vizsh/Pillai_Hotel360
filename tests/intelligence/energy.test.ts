@@ -75,6 +75,7 @@ describe("energyRecommendations", () => {
     for (const id of ids) {
       state.rooms[id].conditioned = true;
       state.rooms[id].energyManaged = false;
+      state.rooms[id].status = "vacant-clean";
     }
     const recs = energyRecommendations(state, model);
     const rec = recs.find((r) => r.id === "rec-energy-vacant-conditioning");

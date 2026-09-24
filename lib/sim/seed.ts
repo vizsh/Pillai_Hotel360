@@ -80,6 +80,9 @@ export function makeGuest(r: Rand, id: string, roomId: string | null, t: number,
     spendOther: Math.round(randRange(r, 0, 2500) * baseSpend),
     prefs: [...prefs],
     sentiment: Math.max(-1, Math.min(1, gaussian(r, seaView ? 0.45 : 0.3, 0.3) + (type === "suite" ? 0.15 : 0))),
+    // SIMULATED opt-out rate — no real hotel-industry consent benchmark cited here, unlike
+    // the rest of this file's constants; illustrative only.
+    consentPersonalization: r() < 0.85,
     vip,
     stays: loyalty === "none" ? 1 : loyalty === "silver" ? randInt(r, 2, 4) : loyalty === "gold" ? randInt(r, 5, 12) : randInt(r, 12, 40),
   };
