@@ -3,7 +3,7 @@ import { floorY } from "@/lib/architecture/generate";
 import { defaultConfig } from "@/lib/architecture/config";
 import { mulberry32, pick, randInt, randRange, clamp, type Rand } from "@/lib/utils";
 import type { Alert, FeedEvent, RequestType, ServiceRequest, SimState, Staff, Severity } from "./types";
-import { DAY, HOUR, makeGuest, occupancyTarget, rateForRoom } from "./seed";
+import { DAY, HOUR, dayOfWeekFactor, makeGuest, occupancyTarget, rateForRoom } from "./seed";
 import { pickRequestType, requestTemplates, reviewText } from "./text";
 import { assetNode, findPath, nearestNode, roomDoorNode, zoneNode } from "./nav";
 import { assessAsset, maintenanceRecommendations, statusFor } from "@/lib/intelligence/maintenance";
@@ -263,7 +263,10 @@ export function tick(state: SimState, model: ResortModel, dtMin: number) {
   }
 
   const occupied = rooms.filter((r) => r.guestId).length;
-  const target = occupancyTarget(state.scenario) * (state.rateMultiplier > 1 ? 1 - (state.rateMultiplier - 1) * 0.45 : 1 + (1 - state.rateMultiplier) * 0.35);
+  const target =
+    occupancyTarget(state.scenario) *
+    dayOfWeekFactor(Math.floor(state.t / DAY)) *
+    (state.rateMultiplier > 1 ? 1 - (state.rateMultiplier - 1) * 0.45 : 1 + (1 - state.rateMultiplier) * 0.35);
   const tod = now.hour >= 13 && now.hour <= 21 ? 1 : now.hour >= 9 ? 0.35 : 0.05;
   const deficit = target * totalRooms - occupied;
   if (deficit > 0) {

@@ -5,6 +5,7 @@ import { useSim } from "@/store/sim";
 import { getModel } from "@/lib/architecture/model";
 import { computePricing, computeSegmentPricing } from "@/lib/intelligence/pricing";
 import { assessGroupBlock } from "@/lib/intelligence/groupBlocks";
+import { forecastDemand, peakDemandDay } from "@/lib/intelligence/demandSpine";
 import { acceptRecommendation, dismissRecommendationLogged } from "@/lib/api/recommendationActions";
 import { AnalyticsShell, Card, chartTheme } from "./AnalyticsShell";
 import { Button, Provenance, Stat, Tag } from "@/components/ui/primitives";
@@ -28,6 +29,17 @@ export function RevenuePage() {
   const byFloor = model.floors.filter((f) => f.kind === "guest").map((f) => ({ floor: `F${f.index}`, rev: Math.round(f.rooms.reduce((s, r) => s + state.rooms[r.id].revenue7d, 0) / 1000), sea: Math.round(f.rooms.filter((r) => r.seaView).reduce((s, r) => s + state.rooms[r.id].revenue7d, 0) / 1000) }));
   const groupBlock = assessGroupBlock(state, model);
   const groupRec = Object.values(state.recommendations).find((r) => r.module === "groupblock" && r.status === "pending");
+  const demand = forecastDemand(state, model);
+  const demandPeak = peakDemandDay(demand);
+  const demandChart = demand.map((d) => ({
+    day: d.dayOffset === 0 ? `${d.label} (today)` : d.label,
+    low: +(d.occupancyLow * 100).toFixed(1),
+    expected: +(d.expectedOccupancy * 100).toFixed(1),
+    high: +(d.occupancyHigh * 100).toFixed(1),
+    band: +((d.occupancyHigh - d.occupancyLow) * 100).toFixed(1),
+  }));
+  const demandYMin = Math.max(0, Math.floor(Math.min(...demand.map((d) => d.occupancyLow)) * 100 - 5));
+  const demandYMax = Math.min(100, Math.ceil(Math.max(...demand.map((d) => d.occupancyHigh)) * 100 + 5));
 
   return (
     <AnalyticsShell title="Revenue Studio" subtitle="Dynamic pricing on a constant-elasticity demand curve, with pacing, seasonality and competitor index as inputs. Accepting a rate writes it back into the twin.">
@@ -48,6 +60,28 @@ export function RevenuePage() {
           <Stat label="Direct booking share" value={fmtPct(state.kpis.directBookingShare)} sub="of today's occupied-room revenue" />
           <Stat label="OTA commission avoided" value={fmtINR(state.kpis.otaCommissionSavedToday)} sub="today, at a 20% blended OTA rate" accent="var(--positive)" />
         </div>
+      </Card>
+
+      <Card title="Demand spine · 14-day occupancy forecast" right={<Provenance kind="modeled" />}>
+        <p className="mb-3 text-[11.5px] text-mid">
+          Seasonal-naive forecast: day-of-week buckets of this session&apos;s own observed occupancy, blended toward the scenario&apos;s day-of-week-shaped baseline while history is thin — the same demand curve the live sim runs on, not an independent guess. Confidence rises as more same-weekday samples accumulate.
+        </p>
+        <ResponsiveContainer width="100%" height={220}>
+          <AreaChart data={demandChart}>
+            <CartesianGrid stroke={chartTheme.grid} strokeDasharray="2 4" />
+            <XAxis dataKey="day" stroke={chartTheme.axis} fontSize={10} />
+            <YAxis stroke={chartTheme.axis} fontSize={10} domain={[demandYMin, demandYMax]} tickFormatter={(v) => `${v}%`} />
+            <Tooltip contentStyle={chartTheme.tooltip} />
+            <Area type="monotone" dataKey="low" stackId="band" stroke="none" fill="transparent" legendType="none" tooltipType="none" />
+            <Area type="monotone" dataKey="band" stackId="band" stroke="none" fill="#2dd4bf" fillOpacity={0.28} name="range (low–high)" />
+            <Line type="monotone" dataKey="expected" stroke="#2dd4bf" strokeWidth={2} dot={false} name="expected occupancy" />
+          </AreaChart>
+        </ResponsiveContainer>
+        {demandPeak && (
+          <p className="mt-2 text-[11.5px] text-mid">
+            Peak: <span className="text-hi">{demandPeak.label}</span> ({demandPeak.dayOffset === 0 ? "today" : `+${demandPeak.dayOffset}d`}) at <span className="text-hi">{fmtPct(demandPeak.expectedOccupancy)}</span> · {demandPeak.drivers.join(" · ")} · confidence {(demandPeak.confidence * 100).toFixed(0)}%
+          </p>
+        )}
       </Card>
 
       <div className="grid grid-cols-3 gap-4">

@@ -82,6 +82,21 @@ export function occupancyTarget(scenario: Scenario) {
   return { "peak-season": 0.91, "monsoon-lull": 0.48, "conference-block": 0.86, "equipment-crisis": 0.82, "vip-arrival": 0.88 }[scenario];
 }
 
+export const WEEKDAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+/** Weekend leisure-resort occupancy runs 15-20% above weekday (WebSearch-verified, Indian
+ * market). Normalized to a weekly mean of 1.0 so it reshapes a scenario's average occupancy
+ * across the week rather than inflating or deflating it — Mon-Thu sit below the scenario's
+ * target, Fri-Sat above it (~19% Fri/Sat-vs-Mon-Thu spread), Sun winds back down. Both the
+ * live sim (engine.ts's occupancy-deficit tick) and the demand-spine forecast read this same
+ * curve, so the forecast is never fighting a different demand model than the one that's
+ * actually running. */
+const DAY_OF_WEEK_FACTOR = [0.9518, 0.899, 0.899, 1.0046, 1.1105, 1.1317, 1.0046];
+
+export function dayOfWeekFactor(dayIndex: number) {
+  return DAY_OF_WEEK_FACTOR[((dayIndex % 7) + 7) % 7];
+}
+
 export function baseRateFor(scenario: Scenario) {
   return { "peak-season": 14200, "monsoon-lull": 8400, "conference-block": 11800, "equipment-crisis": 12600, "vip-arrival": 13400 }[scenario];
 }
