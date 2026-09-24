@@ -6,6 +6,7 @@ import { useTwin } from "@/store/twin";
 import { getModel } from "@/lib/architecture/model";
 import { assessHousekeepingFatigue, BURNOUT_THRESHOLD, depts, forecastDemand, solveRoster, STANDARD_ROOMS_PER_HK_SHIFT } from "@/lib/intelligence/staffing";
 import { forecastWeather } from "@/lib/intelligence/weather";
+import { detectCausalChains } from "@/lib/intelligence/causalChain";
 import { deptColors } from "@/lib/twin/colors";
 import { acceptRecommendation } from "@/lib/api/recommendationActions";
 import { fmtClock } from "@/lib/sim/engine";
@@ -28,6 +29,8 @@ export function OperationsPage() {
   const hkFatigue = assessHousekeepingFatigue(state);
   const weather = forecastWeather(state);
   const weatherRecs = Object.values(state.recommendations).filter((r) => r.module === "weather" && r.status === "pending");
+  const chains = detectCausalChains(state, model);
+  const stageLabel: Record<string, string> = { complaint: "Complaint", diagnosis: "Diagnosis", workorder: "Work order", relocation: "Relocation", recovery: "Recovery" };
 
   return (
     <AnalyticsShell title="Operations & Staffing" subtitle="Hourly demand forecast per department, solved into a shift roster with greedy allocation and pairwise swap improvement. Gaps become call-in recommendations.">
@@ -183,6 +186,37 @@ export function OperationsPage() {
           <p className="mt-3 text-[11.5px] text-low">No rain or heatwave day in the next 48h at current occupancy — no playbook needed.</p>
         )}
       </Card>
+
+      {chains.length > 0 && (
+        <Card title="Causal chain tracker · complaint → diagnosis → work order → relocation → recovery" right={<Provenance kind="derived" />}>
+          <p className="mb-3 text-[11.5px] text-mid">
+            Every guest-reported maintenance issue in the last 8h, traced across four modules that already run independently — nothing here is a new signal, it&apos;s the same event followed end to end.
+          </p>
+          <div className="flex flex-col gap-3">
+            {chains.slice(0, 4).map((c) => (
+              <div key={c.requestId} className="rounded-lg border border-stroke bg-white/[0.02] p-3">
+                <div className="flex items-center justify-between">
+                  <Link href="/command" onClick={() => useTwin.getState().select({ kind: "room", id: c.roomId })} className="text-[12.5px] text-hi hover:text-accent">
+                    {c.guestName ?? "Guest"} · {c.roomNumber}
+                  </Link>
+                  <span className="mono text-[10px] text-low">{fmtClock(c.createdAt)}</span>
+                </div>
+                <div className="mt-2 flex items-stretch gap-1">
+                  {c.steps.map((s, i) => (
+                    <div key={s.stage} className="flex flex-1 items-center gap-1" title={s.label}>
+                      <div className={cn("flex-1 rounded-md border px-1.5 py-1.5 text-center", s.done ? "border-positive/40 bg-positive/10" : "border-stroke bg-white/[0.02]")}>
+                        <div className={cn("text-[9.5px] uppercase", s.done ? "text-positive" : "text-low")}>{stageLabel[s.stage]}</div>
+                      </div>
+                      {i < c.steps.length - 1 && <span className="text-low">→</span>}
+                    </div>
+                  ))}
+                </div>
+                <p className="mt-1.5 text-[10.5px] text-low">{c.steps[c.steps.length - 1].label}</p>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
 
       <div className="grid grid-cols-2 gap-4">
         <Card title={`Open requests (${reqs.length})`}>
