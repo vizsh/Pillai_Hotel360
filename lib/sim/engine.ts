@@ -255,6 +255,15 @@ export function tick(state: SimState, model: ResortModel, dtMin: number) {
     state.kpis.energySavedToday = 0;
     state.kpis.ancillaryRevenueToday = 0;
     state.kpis.organicAncillaryToday = 0;
+    // Fairness tally (staffing.ts's assessStaffFairness reads these) — counted once per
+    // completed calendar day against each staff member's fixed roster assignment, the same
+    // day-of-week phase dayOfWeekFactor already uses (index 5/6 = Sat/Sun).
+    const endedWeekday = prevClock.day % 7;
+    const isWeekendDay = endedWeekday === 5 || endedWeekday === 6;
+    for (const s of Object.values(state.staff)) {
+      if (s.shift === "night") s.nightShiftsWorked++;
+      if (isWeekendDay && s.shift !== "off") s.weekendShiftsWorked++;
+    }
     pushFeed(state, "system", `Night audit complete · occupancy ${(state.kpis.occupancy * 100).toFixed(1)}%`);
   }
 

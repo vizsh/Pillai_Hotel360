@@ -4,7 +4,7 @@ import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YA
 import { useSim } from "@/store/sim";
 import { useTwin } from "@/store/twin";
 import { getModel } from "@/lib/architecture/model";
-import { assessHousekeepingFatigue, BURNOUT_THRESHOLD, depts, forecastDemand, solveRoster, STANDARD_ROOMS_PER_HK_SHIFT } from "@/lib/intelligence/staffing";
+import { assessHousekeepingFatigue, assessStaffFairness, BURNOUT_THRESHOLD, depts, forecastDemand, optimizeHousekeepingAssignment, solveRoster, STANDARD_ROOMS_PER_HK_SHIFT } from "@/lib/intelligence/staffing";
 import { forecastWeather } from "@/lib/intelligence/weather";
 import { detectCausalChains } from "@/lib/intelligence/causalChain";
 import { deptColors } from "@/lib/twin/colors";
@@ -31,6 +31,8 @@ export function OperationsPage() {
   const weatherRecs = Object.values(state.recommendations).filter((r) => r.module === "weather" && r.status === "pending");
   const chains = detectCausalChains(state, model);
   const stageLabel: Record<string, string> = { complaint: "Complaint", diagnosis: "Diagnosis", workorder: "Work order", relocation: "Relocation", recovery: "Recovery" };
+  const fairness = assessStaffFairness(state);
+  const hkPlan = optimizeHousekeepingAssignment(state, model);
 
   return (
     <AnalyticsShell title="Operations & Staffing" subtitle="Hourly demand forecast per department, solved into a shift roster with greedy allocation and pairwise swap improvement. Gaps become call-in recommendations.">
@@ -127,6 +129,53 @@ export function OperationsPage() {
           </tbody>
         </table>
       </Card>
+
+      <Card title="Roster fairness · night &amp; weekend shifts" right={<Provenance kind="derived" module="staffing" />}>
+        <p className="mb-3 text-[11.5px] text-mid">
+          Cumulative night and weekend shifts per person this session, by department. A fairness score near 100 means the load is spread evenly; a low score means the same few people are absorbing most of it — the blueprint&apos;s own named &quot;unfair rosters&quot; failure mode.
+        </p>
+        <div className="grid grid-cols-4 gap-2">
+          {fairness.map((d) => (
+            <div key={d.dept} className="rounded-lg border border-stroke bg-white/[0.02] p-2.5">
+              <div className="flex items-center justify-between">
+                <span className="flex items-center gap-1.5 text-[11px] capitalize text-mid">
+                  <span className="h-1.5 w-1.5 rounded-full" style={{ background: deptColors[d.dept] }} />
+                  {d.dept}
+                </span>
+                <span className={cn("mono text-[12px]", d.fairnessScore >= 0.7 ? "text-positive" : d.fairnessScore >= 0.4 ? "text-warm" : "text-critical")}>{(d.fairnessScore * 100).toFixed(0)}</span>
+              </div>
+              {d.mostBurdened && d.mostBurdened.burdenScore > 0 && (
+                <p className="mt-1.5 truncate text-[10px] text-low">
+                  Most loaded: {d.mostBurdened.name} ({d.mostBurdened.nightShiftsWorked}n / {d.mostBurdened.weekendShiftsWorked}w)
+                </p>
+              )}
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      {hkPlan && (
+        <Card title="Housekeeping room assignment · walking distance" right={<Provenance kind="modeled" module="staffing" />}>
+          <p className="mb-3 text-[11.5px] text-mid">
+            Greedy nearest-neighbour room assignment from each attendant&apos;s current position, against a naive equal-split baseline — real room coordinates, not a synthetic distance.
+          </p>
+          <div className="grid grid-cols-4 gap-3">
+            <Stat label="Dirty rooms" value={String(hkPlan.dirtyRoomCount)} />
+            <Stat label="Naive walk" value={`${(hkPlan.naiveDistanceMeters / 1000).toFixed(2)} km`} />
+            <Stat label="Optimised walk" value={`${(hkPlan.optimizedDistanceMeters / 1000).toFixed(2)} km`} accent="var(--positive)" />
+            <Stat label="Savings" value={`${(hkPlan.savingsPct * 100).toFixed(0)}%`} accent={hkPlan.savingsPct > 0 ? "var(--positive)" : undefined} />
+          </div>
+          <div className="mt-3 flex flex-col gap-1">
+            {hkPlan.plans.map((p) => (
+              <div key={p.attendantId} className="flex items-center gap-2 text-[11px]">
+                <span className="w-24 truncate text-mid">{p.attendantName}</span>
+                <span className="mono w-16 text-low">{(p.distanceMeters / 1000).toFixed(2)} km</span>
+                <span className="truncate text-low">{p.roomNumbers.join(" → ")}</span>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
 
       <Card
         title="Housekeeping fatigue"

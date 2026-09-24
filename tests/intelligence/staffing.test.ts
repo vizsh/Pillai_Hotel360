@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { assessHousekeepingFatigue, BURNOUT_THRESHOLD, housekeepingBurnoutRecommendations, STANDARD_ROOMS_PER_HK_SHIFT } from "@/lib/intelligence/staffing";
+import { assessHousekeepingFatigue, assessStaffFairness, BURNOUT_THRESHOLD, housekeepingBurnoutRecommendations, optimizeHousekeepingAssignment, STANDARD_ROOMS_PER_HK_SHIFT } from "@/lib/intelligence/staffing";
 import { tick } from "@/lib/sim/engine";
 import { makeState } from "../helpers";
 
@@ -146,5 +146,84 @@ describe("housekeepingBurnoutRecommendations", () => {
     expect(rec.confidence).toBeGreaterThan(0);
     expect(rec.confidence).toBeLessThanOrEqual(0.9);
     expect(rec.body).toContain(String(STANDARD_ROOMS_PER_HK_SHIFT));
+  });
+});
+
+describe("assessStaffFairness", () => {
+  it("gives the sole heavily-loaded member a burden score of 1 and everyone else a lower one", () => {
+    const { state } = makeState();
+    const hk = Object.values(state.staff).filter((s) => s.dept === "housekeeping");
+    for (const s of hk) {
+      s.nightShiftsWorked = 0;
+      s.weekendShiftsWorked = 0;
+    }
+    hk[0].nightShiftsWorked = 10;
+
+    const depts = assessStaffFairness(state);
+    const hkFairness = depts.find((d) => d.dept === "housekeeping")!;
+    const burdened = hkFairness.members.find((m) => m.staffId === hk[0].id)!;
+    expect(burdened.burdenScore).toBe(1);
+    for (const m of hkFairness.members) if (m.staffId !== hk[0].id) expect(m.burdenScore).toBeLessThan(1);
+    expect(hkFairness.mostBurdened?.staffId).toBe(hk[0].id);
+  });
+
+  it("reports a fairness score of 1 (perfectly fair) when every member carries an identical load", () => {
+    const { state } = makeState();
+    const hk = Object.values(state.staff).filter((s) => s.dept === "housekeeping");
+    for (const s of hk) {
+      s.nightShiftsWorked = 3;
+      s.weekendShiftsWorked = 2;
+    }
+    const hkFairness = assessStaffFairness(state).find((d) => d.dept === "housekeeping")!;
+    expect(hkFairness.coefficientOfVariation).toBe(0);
+    expect(hkFairness.fairnessScore).toBe(1);
+  });
+
+  it("keeps fairnessScore within [0,1] and covers every department with at least one staff member", () => {
+    const { state } = makeState();
+    const results = assessStaffFairness(state);
+    for (const d of results) {
+      expect(d.fairnessScore).toBeGreaterThanOrEqual(0);
+      expect(d.fairnessScore).toBeLessThanOrEqual(1);
+      expect(d.members.length).toBeGreaterThan(0);
+    }
+  });
+});
+
+describe("optimizeHousekeepingAssignment", () => {
+  it("returns null when there are no dirty rooms", () => {
+    const { state, model } = makeState();
+    for (const r of Object.values(state.rooms)) r.status = "vacant-clean";
+    expect(optimizeHousekeepingAssignment(state, model)).toBeNull();
+  });
+
+  it("returns null when no housekeeping attendant is on duty", () => {
+    const { state, model } = makeState();
+    for (const s of Object.values(state.staff)) if (s.dept === "housekeeping" && s.role === "Room Attendant") s.status = "off";
+    state.rooms[model.rooms[0].id].status = "vacant-dirty";
+    expect(optimizeHousekeepingAssignment(state, model)).toBeNull();
+  });
+
+  it("never assigns a fewer total distance to the optimized plan being longer than the naive one", () => {
+    const { state, model } = makeState("peak-season", 3);
+    for (const r of Object.values(state.rooms)) if (!r.guestId) r.status = "vacant-dirty";
+    for (const s of Object.values(state.staff)) if (s.dept === "housekeeping" && s.role === "Room Attendant") s.status = "idle";
+
+    const plan = optimizeHousekeepingAssignment(state, model);
+    expect(plan).not.toBeNull();
+    expect(plan!.optimizedDistanceMeters).toBeLessThanOrEqual(plan!.naiveDistanceMeters + 1e-6);
+    expect(plan!.savingsPct).toBeGreaterThanOrEqual(0);
+  });
+
+  it("assigns every dirty room to exactly one attendant, with no room left out or duplicated", () => {
+    const { state, model } = makeState("peak-season", 3);
+    for (const r of Object.values(state.rooms)) if (!r.guestId) r.status = "vacant-dirty";
+    for (const s of Object.values(state.staff)) if (s.dept === "housekeeping" && s.role === "Room Attendant") s.status = "idle";
+
+    const plan = optimizeHousekeepingAssignment(state, model)!;
+    const dirtyCount = Object.values(state.rooms).filter((r) => r.status === "vacant-dirty").length;
+    const assignedNumbers = plan.plans.flatMap((p) => p.roomNumbers);
+    expect(assignedNumbers.length).toBe(dirtyCount);
+    expect(new Set(assignedNumbers).size).toBe(assignedNumbers.length);
   });
 });

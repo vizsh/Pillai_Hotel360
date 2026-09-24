@@ -1,5 +1,5 @@
-import type { ResortModel } from "@/lib/architecture/types";
-import type { Dept, Recommendation, SimState } from "@/lib/sim/types";
+import type { ResortModel, RoomCell, Vec3 } from "@/lib/architecture/types";
+import type { Dept, Recommendation, SimState, Staff } from "@/lib/sim/types";
 import { clamp } from "@/lib/utils";
 
 export const depts: Dept[] = ["housekeeping", "engineering", "fnb", "frontdesk", "concierge", "spa", "security"];
@@ -198,4 +198,159 @@ export function housekeepingBurnoutRecommendations(state: SimState): Recommendat
       payload: { dept: "housekeeping", shift: nextShift, count: callIn },
     },
   ];
+}
+
+export interface StaffFairness {
+  staffId: string;
+  name: string;
+  nightShiftsWorked: number;
+  weekendShiftsWorked: number;
+  /** 0-1 against this department's own most-loaded member this session — not an absolute
+   * scale, since "a lot" of night shifts means something different for security (who always
+   * rosters some) than for spa (who rarely does). */
+  burdenScore: number;
+}
+
+export interface DeptFairness {
+  dept: Dept;
+  members: StaffFairness[];
+  /** Coefficient of variation (std/mean) of combined night+weekend load across the
+   * department — 0 means everyone's carried exactly the same load, higher means it's
+   * concentrated on fewer people. The blueprint's own "same staff always get weekend and
+   * night shifts" problem, given a real number instead of a manager's hunch. */
+  coefficientOfVariation: number;
+  fairnessScore: number;
+  mostBurdened: StaffFairness | null;
+  leastBurdened: StaffFairness | null;
+}
+
+/** Tracks lib/sim/types.ts's Staff.nightShiftsWorked/weekendShiftsWorked (tallied once per
+ * completed calendar day in engine.ts) into a per-department fairness read. Because shift is
+ * a fixed roster assignment in this simulator (nobody rotates on their own), the same people
+ * genuinely do carry the same load every day unless a "call in from off-shift" staffing
+ * recommendation temporarily reassigns someone — this module surfaces that imbalance, it
+ * doesn't (yet) auto-correct the roster itself. */
+export function assessStaffFairness(state: SimState): DeptFairness[] {
+  const out: DeptFairness[] = [];
+  for (const dept of depts) {
+    const members = Object.values(state.staff).filter((s) => s.dept === dept);
+    if (!members.length) continue;
+    const loads = members.map((s) => s.nightShiftsWorked + s.weekendShiftsWorked);
+    const maxLoad = Math.max(1, ...loads);
+    const fairness: StaffFairness[] = members.map((s, i) => ({
+      staffId: s.id,
+      name: s.name,
+      nightShiftsWorked: s.nightShiftsWorked,
+      weekendShiftsWorked: s.weekendShiftsWorked,
+      burdenScore: loads[i] / maxLoad,
+    }));
+    const mean = loads.reduce((a, b) => a + b, 0) / loads.length;
+    const variance = loads.reduce((a, b) => a + (b - mean) ** 2, 0) / loads.length;
+    const cv = mean > 0 ? Math.sqrt(variance) / mean : 0;
+    const sorted = [...fairness].sort((a, b) => b.burdenScore - a.burdenScore);
+    out.push({
+      dept,
+      members: fairness,
+      coefficientOfVariation: cv,
+      fairnessScore: clamp(1 - cv, 0, 1),
+      mostBurdened: sorted[0] ?? null,
+      leastBurdened: sorted[sorted.length - 1] ?? null,
+    });
+  }
+  return out;
+}
+
+/** Flat elevator/stairwell time-cost added whenever consecutive rooms in an attendant's
+ * chain are on different floors — straight-line same-floor distance alone would understate
+ * a plan that keeps hopping floors even if the horizontal distance looks short. */
+const FLOOR_CHANGE_PENALTY_M = 15;
+
+function roomToRoomDistance(a: RoomCell, b: RoomCell): number {
+  return Math.hypot(a.center[0] - b.center[0], a.center[2] - b.center[2]) + (a.floor !== b.floor ? FLOOR_CHANGE_PENALTY_M : 0);
+}
+
+function pointToRoomDistance(p: Vec3, floor: number, r: RoomCell): number {
+  return Math.hypot(p[0] - r.center[0], p[2] - r.center[2]) + (floor !== r.floor ? FLOOR_CHANGE_PENALTY_M : 0);
+}
+
+function chainDistance(rooms: RoomCell[]): number {
+  let d = 0;
+  for (let i = 1; i < rooms.length; i++) d += roomToRoomDistance(rooms[i - 1], rooms[i]);
+  return d;
+}
+
+export interface HkAssignmentPlan {
+  attendantId: string;
+  attendantName: string;
+  roomNumbers: string[];
+  distanceMeters: number;
+}
+
+export interface HkAssignmentComparison {
+  dirtyRoomCount: number;
+  attendantCount: number;
+  naiveDistanceMeters: number;
+  optimizedDistanceMeters: number;
+  savingsPct: number;
+  plans: HkAssignmentPlan[];
+}
+
+/** The blueprint's own worked example for Module 3's advanced tier: "Room assignments
+ * optimised: average walking distance cut from 1.8 km to 1.1 km per attendant." Compares a
+ * naive round-robin room assignment (what "whoever's free takes the next one" produces)
+ * against a greedy nearest-neighbor assignment starting from each attendant's current
+ * position — real geometry (RoomCell.center), not a synthetic distance. Straight-line
+ * distance plus a flat floor-change penalty, not full corridor pathfinding (lib/sim/nav.ts's
+ * A* is reserved for live single-request dispatch, which already picks the nearest idle
+ * attendant per request — this is a batch, whole-shift planning view greedy dispatch alone
+ * doesn't produce, since nearest-for-one-request can still zigzag an attendant across a
+ * shift). Returns null when there's nothing to plan (no dirty rooms, or no attendants). */
+export function optimizeHousekeepingAssignment(state: SimState, model: ResortModel): HkAssignmentComparison | null {
+  const dirtyRooms = model.rooms.filter((r) => state.rooms[r.id]?.status === "vacant-dirty");
+  const attendants: Staff[] = Object.values(state.staff).filter((s) => s.dept === "housekeeping" && s.role === "Room Attendant" && s.status !== "off");
+  if (dirtyRooms.length === 0 || attendants.length === 0) return null;
+
+  // Naive baseline: split the dirty-room list into contiguous, equal-sized blocks, one per
+  // attendant, in whatever order the rooms naturally list in (a manager handing out "your
+  // 6, your 6, your 6" without looking at a floor plan) — NOT an interleaved round-robin,
+  // which can accidentally look artificially good or bad depending on how evenly spaced the
+  // rooms happen to be relative to the attendant count.
+  const perAttendant = Math.ceil(dirtyRooms.length / attendants.length);
+  const naiveGroups: RoomCell[][] = attendants.map((_, i) => dirtyRooms.slice(i * perAttendant, (i + 1) * perAttendant));
+  const naiveDistanceMeters = naiveGroups.reduce((sum, group) => sum + chainDistance(group), 0);
+
+  const remaining = new Map(dirtyRooms.map((r) => [r.id, r]));
+  const plans: HkAssignmentPlan[] = [];
+  for (const s of attendants) {
+    const group: RoomCell[] = [];
+    let cursor: Vec3 = s.position;
+    let cursorFloor = s.floor;
+    for (let i = 0; i < perAttendant && remaining.size > 0; i++) {
+      let best: RoomCell | null = null;
+      let bestDist = Infinity;
+      for (const r of remaining.values()) {
+        const d = pointToRoomDistance(cursor, cursorFloor, r);
+        if (d < bestDist) {
+          bestDist = d;
+          best = r;
+        }
+      }
+      if (!best) break;
+      group.push(best);
+      remaining.delete(best.id);
+      cursor = best.center;
+      cursorFloor = best.floor;
+    }
+    if (group.length) plans.push({ attendantId: s.id, attendantName: s.name, roomNumbers: group.map((r) => r.number), distanceMeters: chainDistance(group) });
+  }
+  const optimizedDistanceMeters = plans.reduce((sum, p) => sum + p.distanceMeters, 0);
+
+  return {
+    dirtyRoomCount: dirtyRooms.length,
+    attendantCount: attendants.length,
+    naiveDistanceMeters,
+    optimizedDistanceMeters,
+    savingsPct: naiveDistanceMeters > 0 ? (naiveDistanceMeters - optimizedDistanceMeters) / naiveDistanceMeters : 0,
+    plans,
+  };
 }

@@ -90,6 +90,14 @@ export interface Staff {
    * shifts (rooms-per-attendant above the 14-room industry standard), recovers during
    * off-duty hours. Zero and inert for every other department — not modeled there. */
   fatigue: number;
+  /** Cumulative night shifts this staff member has worked this session, counted once per
+   * calendar day at night-audit — the blueprint's "unfair rosters: same staff always get
+   * weekend and night shifts" problem needs a real tally to show a fairness score against,
+   * not a hunch. */
+  nightShiftsWorked: number;
+  /** Cumulative shifts worked on a Saturday or Sunday this session, same counting rule as
+   * nightShiftsWorked. */
+  weekendShiftsWorked: number;
 }
 
 export type AssetStatus = "healthy" | "degraded" | "critical" | "service" | "failed";
