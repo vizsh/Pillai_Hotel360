@@ -53,6 +53,21 @@ describe("tick", () => {
     }
   });
 
+  it("keeps TRevPAR at or above today's room-only RevPAR contribution, and direct-booking share within [0,1]", () => {
+    const { state, model } = makeState("peak-season", 7);
+    const totalRooms = Object.keys(state.rooms).length;
+    for (let i = 0; i < 96; i++) tick(state, model, 15);
+    // Both trevparToday and revenueToday accumulate since the last night audit (unlike revpar,
+    // an instantaneous rate) — ancillary spend/organic accrual is >= 0, so TRevPAR can only sit
+    // at or above the room-only revenue accumulated so far, on the same ÷ available-rooms basis.
+    expect(state.kpis.trevparToday).toBeGreaterThanOrEqual(state.kpis.revenueToday / totalRooms - 0.001);
+    expect(state.kpis.directBookingShare).toBeGreaterThanOrEqual(0);
+    expect(state.kpis.directBookingShare).toBeLessThanOrEqual(1);
+    expect(state.kpis.otaCommissionSavedToday).toBeGreaterThanOrEqual(0);
+    // Commission saved can never exceed the room revenue it's a fraction of.
+    expect(state.kpis.otaCommissionSavedToday).toBeLessThanOrEqual(state.kpis.revenueToday * 0.201);
+  });
+
   it("regenerates recommendations on the documented 30-minute cadence without throwing across every scenario", () => {
     const scenarios = ["peak-season", "monsoon-lull", "conference-block", "equipment-crisis", "vip-arrival"] as const;
     for (const scenario of scenarios) {

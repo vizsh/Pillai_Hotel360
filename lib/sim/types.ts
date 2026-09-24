@@ -219,6 +219,23 @@ export interface Kpis {
    * revenueToday, which is room revenue only. Zero until lib/intelligence/personalization.ts
    * actually models this; previously every NBA only ever moved guest sentiment. */
   ancillaryRevenueToday: number;
+  /** Organic F&B/spa/other spend guests generate on their own (engine.ts's per-tick drift on
+   * Guest.spendFnb), separate from ancillaryRevenueToday's NBA-attributed slice — together
+   * these are "every outlet's revenue today," the total TRevPAR needs and RevPAR alone
+   * can't see. Resets to 0 at night audit like revenueToday. */
+  organicAncillaryToday: number;
+  /** Total revenue (rooms + F&B + spa + other) ÷ available rooms — the metric the blueprint
+   * explicitly flags hotels should manage instead of RevPAR, since a full-but-quiet resort
+   * and a full-and-spending resort look identical on RevPAR alone. */
+  trevparToday: number;
+  /** Share of currently occupied rooms' revenue booked on Guest.channel "direct" (vs OTA/
+   * corporate/agent) — revenue-weighted, not a headcount share, so a discounted OTA room
+   * doesn't count the same as a full-rate direct one. */
+  directBookingShare: number;
+  /** ₹ saved today by the direct-booked share of revenueToday not paying an OTA commission,
+   * at a 20% blended rate (MakeMyTrip/Booking.com India list 15-25% depending on property
+   * and programme tier). An estimate against a counterfactual, not a real ledger line. */
+  otaCommissionSavedToday: number;
 }
 
 export interface ChatMessage {

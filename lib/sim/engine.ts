@@ -253,6 +253,7 @@ export function tick(state: SimState, model: ResortModel, dtMin: number) {
     state.kpis.energyToday = 0;
     state.kpis.energySavedToday = 0;
     state.kpis.ancillaryRevenueToday = 0;
+    state.kpis.organicAncillaryToday = 0;
     pushFeed(state, "system", `Night audit complete · occupancy ${(state.kpis.occupancy * 100).toFixed(1)}%`);
   }
 
@@ -436,7 +437,9 @@ export function tick(state: SimState, model: ResortModel, dtMin: number) {
     const floor = model.roomById.get(g.roomId)!.floor;
     for (const a of model.assets) if (a.servesFloors.includes(floor) && state.assets[a.id].status === "failed") drift -= (a.kind === "ahu" || a.kind === "chiller" ? 0.07 : 0.03) * dtH;
     g.sentiment = clamp(g.sentiment + drift, -1, 1);
-    g.spendFnb += randRange(rand, 0, 1) < 0.5 ? 0 : randRange(rand, 40, 260) * dtH;
+    const fnbTick = randRange(rand, 0, 1) < 0.5 ? 0 : randRange(rand, 40, 260) * dtH;
+    g.spendFnb += fnbTick;
+    state.kpis.organicAncillaryToday += fnbTick;
     state.rooms[g.roomId].sentiment = g.sentiment;
     if (g.sentiment < -0.45 && rand() < 0.02 * dtH && !state.alerts[`sent-${g.id}`]) {
       addAlert(state, { id: `sent-${g.id}`, severity: "warn", kind: "sentiment", targetKind: "room", targetId: g.roomId, title: `At-risk guest · ${model.roomById.get(g.roomId)!.number}`, body: `${g.name} sentiment ${g.sentiment.toFixed(2)}. ${g.loyalty !== "none" ? `${g.loyalty} member.` : ""} Service recovery recommended.` });
@@ -474,17 +477,27 @@ export function tick(state: SimState, model: ResortModel, dtMin: number) {
   }
   for (const id of Object.keys(state.guests)) if (!state.guests[id].roomId && Object.keys(state.guests).length > 400) delete state.guests[id];
 
-  const occ = rooms.filter((r) => r.guestId).length;
-  const adr = occ ? rooms.filter((r) => r.guestId).reduce((s, r) => s + r.rate, 0) / occ : 0;
+  const occRooms = rooms.filter((r) => r.guestId);
+  const occ = occRooms.length;
+  const adr = occ ? occRooms.reduce((s, r) => s + r.rate, 0) / occ : 0;
   const recent = state.reviews.slice(-40);
   const gssReviews = recent.length ? recent.reduce((s, r) => s + r.rating, 0) / recent.length : 4.2;
   const inhouse = Object.values(state.guests).filter((g) => g.roomId);
   const gssLive = inhouse.length ? 3.1 + (inhouse.reduce((s, g) => s + g.sentiment, 0) / inhouse.length) * 1.9 : 4.2;
+  // MakeMyTrip/Goibibo/Booking.com list 15-25% commission on Indian OTA bookings; 20% is the
+  // blended midpoint used to estimate what the direct-booked share of today's room revenue
+  // avoided paying, not a real ledger figure.
+  const OTA_COMMISSION_RATE = 0.2;
+  const directRevenue = occRooms.filter((r) => state.guests[r.guestId!]?.channel === "direct").reduce((s, r) => s + r.rate, 0);
+  const directBookingShare = occ ? directRevenue / (adr * occ) : 0;
   state.kpis = {
     ...state.kpis,
     occupancy: occ / totalRooms,
     adr,
     revpar: (adr * occ) / totalRooms,
+    trevparToday: (state.kpis.revenueToday + state.kpis.organicAncillaryToday + state.kpis.ancillaryRevenueToday) / totalRooms,
+    directBookingShare,
+    otaCommissionSavedToday: state.kpis.revenueToday * directBookingShare * OTA_COMMISSION_RATE,
     gss: clamp(gssReviews * 0.5 + gssLive * 0.5, 1, 5),
     openAlerts: Object.values(state.alerts).filter((a) => !a.resolvedAt).length,
     staffOnShift: Object.values(state.staff).filter((s) => s.status !== "off").length,

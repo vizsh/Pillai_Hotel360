@@ -39,6 +39,17 @@ export function RevenuePage() {
         <Stat label="Revenue today" value={fmtINR(state.kpis.revenueToday)} />
       </div>
 
+      <Card title="Total revenue per available room" right={<Provenance kind="derived" />}>
+        <p className="mb-3 text-[11.5px] text-mid">
+          RevPAR counts room revenue only — a full-but-quiet resort and a full-and-spending resort look identical on it. TRevPAR rolls in F&amp;B, spa and other outlet spend per available room.
+        </p>
+        <div className="grid grid-cols-3 gap-4">
+          <Stat label="TRevPAR today" value={fmtINR(state.kpis.trevparToday)} sub={`vs RevPAR ${fmtINR(state.kpis.revpar)}`} accent="var(--accent)" />
+          <Stat label="Direct booking share" value={fmtPct(state.kpis.directBookingShare)} sub="of today's occupied-room revenue" />
+          <Stat label="OTA commission avoided" value={fmtINR(state.kpis.otaCommissionSavedToday)} sub="today, at a 20% blended OTA rate" accent="var(--positive)" />
+        </div>
+      </Card>
+
       <div className="grid grid-cols-3 gap-4">
         <Card title="RevPAR optimisation curve" right={<Provenance kind="modeled" module="pricing" />} className="col-span-2">
           <ResponsiveContainer width="100%" height={280}>
