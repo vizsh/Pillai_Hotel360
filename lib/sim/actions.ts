@@ -183,6 +183,21 @@ export function executeRecommendation(state: SimState, model: ResortModel, rec: 
       pushFeed(state, "pricing", rec.action, "resort", "group-blocks", "info");
       break;
     }
+    case "weather": {
+      pushFeed(state, "system", rec.action, "resort", "weather", "info");
+      break;
+    }
+    case "recovery": {
+      const guestId = p.guestId as string;
+      const g = state.guests[guestId];
+      if (g) {
+        const riskScore = (p.riskScore as number) ?? 0.5;
+        g.sentiment = clamp(g.sentiment + 0.2 + riskScore * 0.15, -1, 1);
+        if (g.roomId) state.rooms[g.roomId].sentiment = g.sentiment;
+        pushFeed(state, "task", `${rec.action} delivered to ${g.name}`, "guest", guestId, "info");
+      }
+      break;
+    }
   }
 }
 

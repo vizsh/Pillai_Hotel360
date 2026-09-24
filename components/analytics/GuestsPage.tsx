@@ -7,7 +7,9 @@ import { useTwin } from "@/store/twin";
 import { getModel } from "@/lib/architecture/model";
 import { segmentGuests, guestVector, featureNames } from "@/lib/intelligence/segmentation";
 import { nextBestActions } from "@/lib/intelligence/personalization";
+import { assessGuestRisk } from "@/lib/intelligence/guestRecovery";
 import { applyNextBestAction } from "@/lib/sim/actions";
+import { acceptRecommendation } from "@/lib/api/recommendationActions";
 import { AnalyticsShell, Card, chartTheme } from "./AnalyticsShell";
 import { Button, Provenance, Stat, Tag } from "@/components/ui/primitives";
 import { fmtINR, cn } from "@/lib/utils";
@@ -29,6 +31,8 @@ export function GuestsPage() {
     .sort((x, y) => y.a.score - x.a.score)
     .slice(0, 12);
   const segCounts = ["leisure-couple", "family", "business", "luxury", "group"].map((s) => ({ s, n: guests.filter((g) => g.segment === s).length }));
+  const atRisk = assessGuestRisk(state, model);
+  const recoveryRecs = new Map(Object.values(state.recommendations).filter((r) => r.module === "recovery" && r.status === "pending").map((r) => [r.payload?.guestId as string, r]));
 
   return (
     <AnalyticsShell title="Guest Intelligence" subtitle="k-means behavioral segmentation over in-house guests, with a per-guest next-best-action ranking derived from preferences, loyalty and stay stage.">
@@ -100,6 +104,38 @@ export function GuestsPage() {
           </Card>
         ))}
       </div>
+
+      {atRisk.length > 0 && (
+        <Card title="In-stay guest recovery · silent unhappy guests" right={<Provenance kind="modeled" module="recovery" />}>
+          <p className="mb-3 text-[11.5px] text-mid">
+            Guests checking out within 36h whose SLA-breached requests and sentiment trend put them at risk of leaving without ever complaining loudly — then posting the 2-star review after the fact.
+          </p>
+          <div className="grid grid-cols-2 gap-2">
+            {atRisk.slice(0, 6).map((a) => {
+              const rec = recoveryRecs.get(a.guestId);
+              return (
+                <div key={a.guestId} className="rounded-lg border border-critical/40 bg-critical/5 p-3">
+                  <div className="flex items-center justify-between">
+                    <Link href="/command" onClick={() => useTwin.getState().select({ kind: "room", id: a.roomId })} className="text-[12.5px] text-hi hover:text-accent">
+                      {a.guestName} · {model.roomById.get(a.roomId)?.number}
+                    </Link>
+                    <span className="mono text-[12px] text-critical">{(a.riskScore * 100).toFixed(0)}%</span>
+                  </div>
+                  <p className="mt-1 text-[11px] text-mid">
+                    {a.delayedRequests} request{a.delayedRequests === 1 ? "" : "s"} past SLA · sentiment {a.sentiment >= 0 ? "+" : ""}{a.sentiment.toFixed(2)} · checkout in {Math.round(a.minutesToCheckout / 60)}h
+                  </p>
+                  <p className="mt-1 text-[10.5px] text-low">{a.gesture}</p>
+                  {rec && (
+                    <Button size="sm" variant="primary" className="mt-2" onClick={() => acceptRecommendation(mutate, model, rec)}>
+                      Deliver gesture
+                    </Button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+      )}
 
       <Card title="Next best actions · top ranked" right={<Tag color="#34d399">NBA</Tag>}>
         <div className="grid grid-cols-2 gap-2">

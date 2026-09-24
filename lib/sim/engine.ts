@@ -10,6 +10,7 @@ import { assessAsset, maintenanceRecommendations, statusFor } from "@/lib/intell
 import { scoreText, sentimentRecommendations } from "@/lib/intelligence/sentiment";
 import { runModules } from "@/lib/intelligence/registry";
 import { FATIGUE_BASE_ACCRUAL, FATIGUE_OVERLOAD_ACCRUAL, FATIGUE_RECOVERY_RATE, STANDARD_ROOMS_PER_HK_SHIFT } from "@/lib/intelligence/staffing";
+import { weatherForDay } from "@/lib/intelligence/weather";
 
 let counter = 1;
 let rand: Rand = mulberry32(1);
@@ -370,13 +371,18 @@ export function tick(state: SimState, model: ResortModel, dtMin: number) {
   }
 
   const crisis = state.scenario === "equipment-crisis" ? 2.2 : 1;
+  // Heat-linked AC failure risk (a named PS edge case): a heatwave day runs AHU/chiller wear
+  // ~60% hotter — reads the same deterministic weather lib/intelligence/weather.ts's forecast
+  // does, so "today's weather" never disagrees between the live sim and the forecast card.
+  const todayWeather = weatherForDay(state.seed, Math.floor(state.t / DAY), state.scenario);
   for (const a of model.assets) {
     const st = state.assets[a.id];
     if (st.status === "service") continue;
     const load = a.kind === "chiller" || a.kind === "ahu" ? 0.6 + 0.4 * (occupied / totalRooms) : 0.8;
     const wear = { chiller: 0.0011, ahu: 0.0007, elevator: 0.0005, pump: 0.0012, boiler: 0.0006, generator: 0.0004, "kitchen-hood": 0.0005, "pool-filter": 0.0008 }[a.kind];
+    const heatLoad = todayWeather.condition === "heatwave" && (a.kind === "chiller" || a.kind === "ahu") ? 1.6 : 1;
     st.runtimeHours += dtH * load;
-    if (st.status !== "failed") st.health = clamp(st.health - wear * load * crisis * dtH * (1 + (1 - st.health) * 2), 0.02, 1);
+    if (st.status !== "failed") st.health = clamp(st.health - wear * load * crisis * heatLoad * dtH * (1 + (1 - st.health) * 2), 0.02, 1);
     const degr = 1 - st.health;
     st.temp += (st.tempBase + degr * 16 - st.temp) * 0.2 * dtH + randRange(rand, -0.6, 0.6) * Math.sqrt(dtH);
     st.vibration += (st.vibBase * (1 + degr * 2.2) - st.vibration) * 0.25 * dtH + randRange(rand, -0.08, 0.08) * Math.sqrt(dtH);

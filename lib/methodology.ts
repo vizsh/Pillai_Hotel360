@@ -78,4 +78,16 @@ export const methodology: Record<ModuleId, MethodologyEntry> = {
     source: "Hospitality Net; Cloudbeds and Revenuenaire revenue-management methodology guides",
     realWorldNote: "This reasons over the currently in-house group/transient mix, since the simulator has no forward-reservations pipeline (guests materialize at check-in, not at booking). A real deployment would run the same math against a specific pending group RFP before it's accepted, using the PMS's booking pace and group-block records.",
   },
+  recovery: {
+    file: "lib/intelligence/guestRecovery.ts",
+    benchmark: "A 525-upscale-hotel study of 11,000 guest complaints found only 68% of service recoveries landed inside the guest's expected timeframe; separate research found only complete, timely resolution — not the gesture alone — predicts repeat patronage. The 'service recovery paradox' (a well-handled failure can out-satisfy no failure at all) has mixed empirical support, so this module leans on timeliness and completeness rather than claiming the paradox as a guarantee.",
+    source: "Hotel service-recovery timeliness research; service recovery paradox literature (McCollough & Bharadwaj, 1992, and later replications)",
+    realWorldNote: "Risk scoring reads request SLA breaches and live sentiment, both already real signals in this codebase. A live deployment would add post-recovery outcome tracking (did the guest's final review improve) — not built here, since it needs a persisted before/after link this module doesn't yet keep.",
+  },
+  weather: {
+    file: "lib/intelligence/weather.ts",
+    benchmark: "Weather-aware operations (moving activities indoors, adjusting staffing and menus for rain; prioritizing AC maintenance ahead of a heat wave) is standard playbook practice for leisure resorts, and heat-linked HVAC failure risk is a named, real operational pattern.",
+    source: "Operational practice, not a single external benchmark",
+    realWorldNote: "No real weather API is called — the edge/on-prem architecture this project targets doesn't assume outbound internet, so weather is a seeded, deterministic per-day forecast (SIMULATED, tagged as such). A real deployment would swap in Open-Meteo or a similar free API with zero change to the playbook logic below it.",
+  },
 };

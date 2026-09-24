@@ -8,6 +8,8 @@ import { personalizationRecommendations } from "./personalization";
 import { guestImpactRecommendations } from "./guestImpact";
 import { energyRecommendations } from "./energy";
 import { groupBlockRecommendations } from "./groupBlocks";
+import { guestRecoveryRecommendations } from "./guestRecovery";
+import { weatherRecommendations } from "./weather";
 
 export const moduleMeta: Record<ModuleId, { label: string; short: string; color: string; description: string; method: string }> = {
   maintenance: { label: "Predictive Maintenance", short: "MAINT", color: "#f4436c", description: "Survival models on asset telemetry surface failures before a guest notices one.", method: "Weibull hazard + telemetry anomaly z-scores" },
@@ -21,6 +23,8 @@ export const moduleMeta: Record<ModuleId, { label: string; short: string; color:
   relocation: { label: "Guest Impact & Relocation", short: "RELOC", color: "#f5a524", description: "When climate control fails, matches displaced guests to vacant rooms outside the affected zone and escorts them.", method: "Greedy same-or-better-type matching against vacant-clean inventory" },
   energy: { label: "Energy Intelligence", short: "NRG", color: "#4ade80", description: "Vacant rooms drawing full conditioning load are flagged and unconditioned automatically — no guest impact, pure waste recovered.", method: "Occupancy-gated HVAC waste detection against a fixed conditioned/unconditioned rate delta" },
   groupblock: { label: "Group Block Optimizer", short: "GRP", color: "#818cf8", description: "Compares what the current group/event block is paying against transient ADR for the same occupied inventory, and flags when the gap is large enough to matter.", method: "Displacement analysis — group ADR vs. transient ADR at current occupancy" },
+  recovery: { label: "In-Stay Guest Recovery", short: "RECOV", color: "#fb7185", description: "Scores silently unhappy in-house guests from request delays and sentiment before checkout, and sizes a recovery gesture to the guest's value and the issue's severity.", method: "Weighted risk score (sentiment + SLA breach density) gated to a pre-checkout window" },
+  weather: { label: "Weather & Event Radar", short: "WX", color: "#38bdf8", description: "A deterministic 7-day weather forecast drives rain and heatwave operating playbooks, and heat-linked AC wear feeds straight into predictive maintenance.", method: "Seeded per-day forecast; rain/heatwave playbooks gated on occupancy and lead time" },
 };
 
 export function runModules(state: SimState, model: ResortModel): Recommendation[] {
@@ -34,5 +38,7 @@ export function runModules(state: SimState, model: ResortModel): Recommendation[
     ...guestImpactRecommendations(state, model),
     ...energyRecommendations(state, model),
     ...groupBlockRecommendations(state, model),
+    ...guestRecoveryRecommendations(state, model),
+    ...weatherRecommendations(state, model),
   ];
 }

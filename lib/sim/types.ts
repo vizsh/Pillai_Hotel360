@@ -147,7 +147,9 @@ export type ModuleId =
   | "segmentation"
   | "relocation"
   | "energy"
-  | "groupblock";
+  | "groupblock"
+  | "recovery"
+  | "weather";
 
 export interface Recommendation {
   id: string;

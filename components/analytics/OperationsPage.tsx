@@ -5,6 +5,7 @@ import { useSim } from "@/store/sim";
 import { useTwin } from "@/store/twin";
 import { getModel } from "@/lib/architecture/model";
 import { assessHousekeepingFatigue, BURNOUT_THRESHOLD, depts, forecastDemand, solveRoster, STANDARD_ROOMS_PER_HK_SHIFT } from "@/lib/intelligence/staffing";
+import { forecastWeather } from "@/lib/intelligence/weather";
 import { deptColors } from "@/lib/twin/colors";
 import { acceptRecommendation } from "@/lib/api/recommendationActions";
 import { fmtClock } from "@/lib/sim/engine";
@@ -25,6 +26,8 @@ export function OperationsPage() {
   const done = Object.values(state.requests).filter((r) => r.status === "done");
   const onTime = done.filter((r) => (r.completedAt ?? 0) - r.createdAt <= r.slaMin).length;
   const hkFatigue = assessHousekeepingFatigue(state);
+  const weather = forecastWeather(state);
+  const weatherRecs = Object.values(state.recommendations).filter((r) => r.module === "weather" && r.status === "pending");
 
   return (
     <AnalyticsShell title="Operations & Staffing" subtitle="Hourly demand forecast per department, solved into a shift roster with greedy allocation and pairwise swap improvement. Gaps become call-in recommendations.">
@@ -146,6 +149,39 @@ export function OperationsPage() {
         <p className="mt-3 text-[11px] text-low">
           Fatigue accrues while working shifts above the {STANDARD_ROOMS_PER_HK_SHIFT}-room-per-attendant standard, and recovers off-duty. Sustained overload correlates with up to 55% 90-day turnover in hotel housekeeping research — the burnout recommendation above prices that exposure.
         </p>
+      </Card>
+
+      <Card title="Weather & event radar · 7-day" right={<Provenance kind="modeled" module="weather" />}>
+        <div className="flex gap-2 overflow-x-auto pb-1">
+          {weather.map((d) => (
+            <div
+              key={d.dayOffset}
+              className={cn(
+                "flex min-w-[64px] flex-col items-center gap-1 rounded-md border px-2 py-2",
+                d.condition === "heatwave" ? "border-critical/40 bg-critical/5" : d.condition === "rain" ? "border-accent/40 bg-accent/5" : "border-stroke bg-white/[0.02]",
+              )}
+            >
+              <span className="text-[10px] text-low">{d.dayOffset === 0 ? "today" : `+${d.dayOffset}d`}</span>
+              <span className={cn("text-[10.5px] font-medium uppercase", d.condition === "heatwave" ? "text-critical" : d.condition === "rain" ? "text-accent" : "text-mid")}>{d.condition}</span>
+              <span className="mono text-[11px] text-hi">{d.tempC}°C</span>
+            </div>
+          ))}
+        </div>
+        {weatherRecs.length > 0 ? (
+          <div className="mt-3 flex flex-col gap-2">
+            {weatherRecs.map((r) => (
+              <div key={r.id} className="rounded-lg border border-warm/40 bg-warm/5 p-3">
+                <div className="text-[12.5px] text-hi">{r.title}</div>
+                <p className="mt-1 text-[11px] text-mid">{r.body}</p>
+                <Button size="sm" variant="primary" className="mt-2" onClick={() => acceptRecommendation(mutate, model, r)}>
+                  Apply playbook
+                </Button>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="mt-3 text-[11.5px] text-low">No rain or heatwave day in the next 48h at current occupancy — no playbook needed.</p>
+        )}
       </Card>
 
       <div className="grid grid-cols-2 gap-4">
