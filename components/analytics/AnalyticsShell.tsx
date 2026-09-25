@@ -7,6 +7,7 @@ import { Box, Lock, Pause, Play } from "lucide-react";
 import { useSim } from "@/store/sim";
 import { useSession } from "@/store/session";
 import { useSimLoop } from "@/hooks/useSimLoop";
+import { useTelegramInbox } from "@/hooks/useTelegramInbox";
 import { fmtClock } from "@/lib/sim/engine";
 import { Button, Provenance } from "@/components/ui/primitives";
 import { MethodologyPanel } from "@/components/command/MethodologyPanel";
@@ -30,6 +31,7 @@ export const routes = [
 
 export function AnalyticsShell({ title, subtitle, children }: { title: string; subtitle: string; children: React.ReactNode }) {
   useSimLoop();
+  useTelegramInbox();
   const path = usePathname();
   const { state, setPaused, setSpeed } = useSim();
   useSim((s) => s.version);

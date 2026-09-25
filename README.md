@@ -30,6 +30,29 @@ ollama pull nomic-embed-text  # embedding model, for RAG retrieval over the reso
 
 No API key, no outbound network call beyond `localhost:11434`. Override the models via `OLLAMA_CHAT_MODEL` / `OLLAMA_EMBED_MODEL` env vars — `phi3:mini` is a much faster (if less capable) alternative chat model if `llama3.1:8b` is too slow on CPU-only hardware, though it does not support tool calling, so the ops assistant needs `llama3.1:8b` or another tools-capable model specifically. First reply after a cold start can take 30-90s while Ollama loads the model into memory (measured live on modest hardware); both routes pre-warm the chat/embed models at server startup so this cost is paid once per process, not once per question — a warm exchange typically returns in 10-15s, including a tool call.
 
+### Optional: Telegram frontline bot
+
+A standalone process for housekeeping/engineering/front-desk staff to receive tasks and report issues from their own phone, without opening the dashboard. Built on Telegram rather than WhatsApp: a Telegram bot needs only a token from [@BotFather](https://t.me/BotFather) (free, instant, no verification), where the WhatsApp Business Cloud API requires a real Meta Business verification and a registered phone number — a real-world approval process, not something this session could set up or test end-to-end. The blueprint itself lists Telegram as the free, instant-setup option, so that's what's built.
+
+```bash
+# 1. Message @BotFather on Telegram, send /newbot, follow the prompts, copy the token it gives you
+# 2. Put it in a .env file in the project root (.env is gitignored, never commit it):
+echo "TELEGRAM_BOT_TOKEN=your-token-here" > .env
+
+# 3. Run the bot alongside (not instead of) the dev server:
+npm run dev    # terminal 1
+npm run bot    # terminal 2
+```
+
+**How it works:** the bot long-polls Telegram directly (no webhook, no public URL needed). Because the simulation only ever lives inside a browser tab, the bot can't reach it directly — instead it reads the same SQLite snapshot the app already persists every ~20s (`lib/db/client.ts`, originally built for demo continuity/audit trail) to know current staff and open tasks, and writes to a small `telegram_inbox` queue table. A hook in the running browser tab (`hooks/useTelegramInbox.ts`) polls that queue every 6s and applies each action through the same `lib/sim/actions.ts` functions any dashboard accept/dismiss button uses — so the dashboard must be open in a browser somewhere for actions to take effect, same as every other part of this sim.
+
+**Staff usage:**
+- `/start <your name>` — link this Telegram chat to a staff member on the current shift roster (exact or unambiguous partial match, e.g. `/start Priya`)
+- `/mytasks` — list currently assigned tasks with a "✅ Done" button per task (SLA-breached tasks are flagged)
+- Any other free text — reported as a new issue if it contains a valid room number (e.g. `"305 tap is leaking"`), routed through the same keyword classifier (`lib/intelligence/concierge.ts`) a guest concierge message goes through
+
+**Known limitations:** text and button interactions only — voice-note transcription (the blueprint's Marathi voice-note example) isn't implemented, since this session's own measured Ollama latency (30-90s per call on modest hardware) made adding a third heavy model for STT impractical for a demo. WhatsApp is scoped out entirely for the verification reason above.
+
 ## What is real and what is simulated
 
 **Everything numeric is synthetic.** A seeded engine (`lib/sim`) generates the property, guests, staff, telemetry, requests, reviews and revenue. Same seed, same run. The UI tags values as `SIMULATED` (raw sim state), `MODELED` (output of an intelligence module) or `DERIVED` (aggregation). No real property or guest data is used or implied.
@@ -48,6 +71,7 @@ The *models* are real implementations, not stubs:
 | AI concierge (task dispatch) | Weighted keyword intent classifier with urgency detection → task dispatch | `lib/intelligence/concierge.ts` |
 | AI concierge (conversational layer, opt-in) | Retrieval-augmented generation over a real knowledge base (cosine similarity, `nomic-embed-text` embeddings) grounds a local Ollama model (`llama3.1:8b`); a deterministic guardrail filter blocks refund/discount/compensation language after generation, before it reaches the guest | `lib/ai/*`, `app/api/concierge/route.ts` |
 | Ops assistant (opt-in) | Function-calling loop against a local Ollama model — 4 tools (`find_room`, `list_open_issues`, `list_guests`, `get_resort_summary`) query a fresh per-request snapshot of the live sim, role- and consent-masked identically to the Guests page; replies are Markdown, rendered by a small dependency-free renderer scoped to what the system prompt actually asks the model to produce | `lib/ai/tools.ts`, `lib/ai/opsSnapshot.ts`, `app/api/ops-assistant/route.ts`, `components/ui/Markdown.tsx` |
+| Telegram frontline bot (opt-in) | Standalone long-polling process bridged to the browser-only sim via a SQLite read model + write queue; free-text issue reports route through the same keyword classifier as the guest concierge | `scripts/telegramBot.ts`, `lib/telegram/*`, `hooks/useTelegramInbox.ts`, `app/api/telegram/inbox/route.ts` |
 
 ## Architecture
 
@@ -82,3 +106,4 @@ components/analytics  deep-dive routes
 - The ops assistant's Markdown renderer is intentionally not a general Markdown parser — it covers headers, bold, bullet/numbered lists and pipe tables, the exact subset the system prompt instructs the model to use, nothing more.
 - Voice input/output uses the browser's own Web Speech API, not a local speech model — real STT/TTS quality and language coverage (English/Hindi/Marathi) depend entirely on the browser and OS, and it is unavailable outside Chromium-based browsers.
 - Failure probabilities are calibrated to look plausible, not to any real asset population.
+- The Telegram bot is text/button-only (no voice-note transcription) and requires the dashboard open in a browser tab somewhere to actually apply its queued actions — it's a remote control for the live sim, not an independent backend. WhatsApp support was scoped out; see the setup section above for why.

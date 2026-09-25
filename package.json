@@ -11,7 +11,8 @@
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "bot": "tsx --env-file=.env scripts/telegramBot.ts"
   },
   "dependencies": {
     "@react-spring/three": "^10.1.2",

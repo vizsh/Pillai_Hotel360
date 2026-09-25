@@ -3,11 +3,13 @@ import path from "node:path";
 import fs from "node:fs";
 
 /** Server-only. A real SQLite database (Node's built-in node:sqlite — experimental as of
- * Node 22, but a genuine embedded SQL database, not a mock) backing two things: periodic
- * full-state snapshots (so a page refresh mid-demo doesn't lose the shift) and an
- * append-only log of every accepted/dismissed recommendation and injected scenario (a
- * real audit trail — "what decisions were made, when, on what basis"). Never import this
- * from a "use client" component; it only runs in Next.js route handlers. */
+ * Node 22, but a genuine embedded SQL database, not a mock) backing periodic full-state
+ * snapshots, an append-only decision audit log, and the Telegram frontline bot's link/inbox
+ * tables (scripts/telegramBot.ts and app/api/telegram/inbox — the bridge between a
+ * standalone bot process and the browser-only live simulation, since the bot has no direct
+ * access to client-side state). Never import this from a "use client" component; only
+ * Next.js route handlers and standalone Node scripts (both real server-side contexts) should
+ * touch it. */
 
 const DB_PATH = path.join(process.cwd(), "data", "resort.db");
 
@@ -38,6 +40,20 @@ function init(): DatabaseSync {
     );
     CREATE INDEX IF NOT EXISTS idx_snapshots_created ON snapshots (created_at);
     CREATE INDEX IF NOT EXISTS idx_action_log_created ON action_log (created_at);
+    CREATE TABLE IF NOT EXISTS telegram_links (
+      chat_id TEXT PRIMARY KEY,
+      staff_id TEXT NOT NULL,
+      staff_name TEXT NOT NULL,
+      linked_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE TABLE IF NOT EXISTS telegram_inbox (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      type TEXT NOT NULL,
+      payload_json TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      processed_at TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_telegram_inbox_unprocessed ON telegram_inbox (processed_at);
   `);
   return db;
 }

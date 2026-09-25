@@ -4,6 +4,7 @@ import type { RelocationPair } from "@/lib/intelligence/guestImpact";
 import type { NextBestAction } from "@/lib/intelligence/personalization";
 import { pushFeed, scheduleService, resolveAlert, nextId, createRequest, dispatchStaff, addAlert, refreshRecommendations } from "./engine";
 import { rateForRoom } from "./seed";
+import { classify } from "@/lib/intelligence/concierge";
 import { clamp } from "@/lib/utils";
 
 /** The one place an accepted next-best-action's effect actually gets applied — sentiment
@@ -240,6 +241,48 @@ export function injectScenario(state: SimState, model: ResortModel, assetId: str
   dispatchStaff(state, model, req, "engineering", "hvac");
   pushFeed(state, "system", `Scenario injected — ${asset.name} taken offline (demo)`, "asset", asset.id, "warn");
   refreshRecommendations(state, model);
+}
+
+/** Confirms a task done from outside the simulated staff walk/work cycle — the Telegram
+ * frontline bot's "✅ Done" button, not a fabricated new completion path: same fields
+ * (status, completedAt, SLA alert resolution) the tick loop itself sets when a dispatched
+ * staff member finishes naturally (lib/sim/engine.ts's "working" branch), applied
+ * immediately because a real person just confirmed it in the field rather than the sim's own
+ * timer running out. Frees the assigned staff member back to idle if they were still marked
+ * on this specific task. */
+export function completeRequestExternally(state: SimState, model: ResortModel, requestId: string, confirmedBy: string): boolean {
+  const req = state.requests[requestId];
+  if (!req || req.status === "done") return false;
+  req.status = "done";
+  req.completedAt = state.t;
+  resolveAlert(state, `sla-${req.id}`);
+  if (req.assignedTo) {
+    const staff = state.staff[req.assignedTo];
+    if (staff && staff.taskId === req.id) {
+      staff.status = "idle";
+      staff.taskId = null;
+      staff.tasksDone++;
+    }
+  }
+  const cell = model.roomById.get(req.roomId);
+  pushFeed(state, "task", `${confirmedBy} confirmed "${req.text}" done via Telegram${cell ? ` — ${cell.number}` : ""}`, "room", req.roomId, "info");
+  return true;
+}
+
+/** A frontline staff member reporting something they noticed, via Telegram free text —
+ * the blueprint's own "staff can report issues they notice, which become tickets" ask.
+ * Reuses lib/intelligence/concierge.ts's classify() (the same deterministic keyword
+ * classifier guest messages go through) rather than a second, separate text pipeline, so a
+ * staff report and a guest complaint about the same thing route the same way. Source is
+ * "staff", not "guest" — ServiceRequest already had this distinction, previously unused. */
+export function reportIssueFromStaff(state: SimState, model: ResortModel, roomId: string, text: string, staffName: string) {
+  const c = classify(text);
+  const type = c.requestType ?? "maintenance";
+  const req = createRequest(state, model, roomId, type, text, "staff", c.sla, null);
+  const cell = model.roomById.get(roomId);
+  pushFeed(state, "task", `${staffName} reported via Telegram: "${text}"${cell ? ` — ${cell.number}` : ""}`, "room", roomId, c.urgency === "high" ? "warn" : "info");
+  dispatchStaff(state, model, req, c.dept === "frontdesk" ? "frontdesk" : c.dept);
+  return req;
 }
 
 export { nextId };

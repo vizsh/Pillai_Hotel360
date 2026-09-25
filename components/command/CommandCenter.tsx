@@ -6,6 +6,7 @@ import { useTwin, type LayerId, type ViewMode } from "@/store/twin";
 import { useSim } from "@/store/sim";
 import { useUi } from "@/store/ui";
 import { useSimLoop } from "@/hooks/useSimLoop";
+import { useTelegramInbox } from "@/hooks/useTelegramInbox";
 import { TopBar } from "./TopBar";
 import { LeftRail } from "./LeftRail";
 import { ContextPanel } from "./ContextPanel";
@@ -24,6 +25,7 @@ const keyLayers: Record<string, LayerId> = { q: "occupancy", w: "maintenance", e
 
 export function CommandCenter() {
   useSimLoop();
+  useTelegramInbox();
   const mobilePanel = useUi((s) => s.mobilePanel);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
