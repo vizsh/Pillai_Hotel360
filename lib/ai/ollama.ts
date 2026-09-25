@@ -64,21 +64,45 @@ export async function embed(text: string): Promise<number[] | null> {
 }
 
 export interface ChatTurn {
-  role: "system" | "user" | "assistant";
+  role: "system" | "user" | "assistant" | "tool";
   content: string;
 }
 
 export async function chat(messages: ChatTurn[]): Promise<string | null> {
+  const result = await chatRaw(messages);
+  return result?.content?.trim() || null;
+}
+
+export interface OllamaToolCall {
+  function: { name: string; arguments: Record<string, unknown> };
+}
+
+export interface OllamaChatMessage {
+  content?: string;
+  tool_calls?: OllamaToolCall[];
+}
+
+/** Longer ceiling than the plain chat() path — tool-calling is a two-round trip (decide
+ * which tool(s) to call, then generate the final answer from the results), so the same
+ * per-call latency this hardware already showed (30-90s) can happen twice in one exchange. */
+const TOOL_CHAT_TIMEOUT_MS = 90000;
+
+/** Same endpoint as chat(), but exposes tool_calls and accepts an optional tool schema —
+ * used by the ops assistant's function-calling loop (app/api/ops-assistant/route.ts). Kept
+ * separate from chat() rather than adding an optional param to every caller, since the two
+ * call sites (guest concierge vs. ops assistant) have genuinely different response shapes to
+ * handle. */
+export async function chatRaw(messages: ChatTurn[], tools?: readonly unknown[]): Promise<OllamaChatMessage | null> {
   try {
     const res = await fetch(`${OLLAMA_HOST}/api/chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ model: OLLAMA_CHAT_MODEL, messages, stream: false, options: { temperature: 0.4 } }),
-      signal: AbortSignal.timeout(CHAT_TIMEOUT_MS),
+      body: JSON.stringify({ model: OLLAMA_CHAT_MODEL, messages, tools, stream: false, options: { temperature: 0.4, num_ctx: 4096 } }),
+      signal: AbortSignal.timeout(tools ? TOOL_CHAT_TIMEOUT_MS : CHAT_TIMEOUT_MS),
     });
     if (!res.ok) return null;
-    const data = (await res.json()) as { message?: { content?: string } };
-    return data.message?.content?.trim() || null;
+    const data = (await res.json()) as { message?: OllamaChatMessage };
+    return data.message ?? null;
   } catch {
     return null;
   }

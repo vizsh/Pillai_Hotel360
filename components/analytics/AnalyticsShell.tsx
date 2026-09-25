@@ -22,6 +22,7 @@ export const routes = [
   { href: "/energy", label: "Energy" },
   { href: "/sentiment", label: "Sentiment" },
   { href: "/concierge", label: "Concierge" },
+  { href: "/assistant", label: "Assistant" },
   { href: "/integrations", label: "Integrations" },
   { href: "/history", label: "History" },
   { href: "/summary", label: "Summary" },

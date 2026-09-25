@@ -48,7 +48,11 @@ export const ROLES: Record<Role, RoleDef> = {
 export const roleList = Object.keys(ROLES) as Role[];
 
 export function isRouteAllowed(role: Role, href: string): boolean {
-  if (href === "/command") return true;
+  // Every role can reach the live twin and the ops assistant — the assistant's own answers
+  // are masked at the data layer (lib/ai/opsSnapshot.ts respects canViewGuestValue per
+  // question), the same way the Guests page masks per role, so gating the route itself would
+  // just duplicate that check in the wrong place.
+  if (href === "/command" || href === "/assistant") return true;
   const def = ROLES[role];
   return def.routes === "*" || def.routes.includes(href);
 }
