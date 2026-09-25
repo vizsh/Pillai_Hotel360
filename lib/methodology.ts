@@ -44,9 +44,9 @@ export const methodology: Record<ModuleId, MethodologyEntry> = {
   },
   concierge: {
     file: "lib/intelligence/concierge.ts",
-    benchmark: "Deliberately a weighted-keyword classifier, not an LLM — zero network dependency, fully inspectable logic, no hallucination risk in a live guest-facing flow.",
-    source: "Design choice, not an external benchmark",
-    realWorldNote: "Could be swapped for an LLM-backed classifier behind the same interface; the deterministic version stays as a reliability fallback.",
+    benchmark: "Task dispatch is deliberately a weighted-keyword classifier, not an LLM — zero network dependency, fully inspectable logic, no hallucination risk in the flow that actually creates work orders. An opt-in conversational layer (lib/ai/*, app/api/concierge/route.ts) now sits on top: RAG over the resort's own knowledge base grounds a local Ollama model (llama3.1:8b, nomic-embed-text embeddings), matching the blueprint's own 'Runs on a local open-weight LLM for privacy and offline resilience' and 'Guardrails prevent the bot from promising refunds or unapproved discounts' asks.",
+    source: "Design choice for task dispatch; blueprint's AI Concierge module spec for the RAG layer",
+    realWorldNote: "The keyword classifier remains the sole path to an actual task/work order — the LLM only ever answers questions, it never dispatches anything, so its known failure mode (verified live: it stated a benefit for the wrong loyalty tier despite the correct tier being in the retrieved context) can't create an incorrect work order, only an incorrect sentence a guest could double-check. A production deployment would add a stricter grounding check (e.g. requiring the reply to quote the retrieved text rather than paraphrase it) before trusting tier-specific claims verbatim.",
   },
   sentiment: {
     file: "lib/intelligence/sentiment.ts",

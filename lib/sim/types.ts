@@ -263,6 +263,15 @@ export interface ChatMessage {
   roomId?: string;
   confidence?: number;
   urgency?: "normal" | "high";
+  /** "rule" = the deterministic keyword classifier's reply (lib/intelligence/concierge.ts),
+   * always present and authoritative for task status. "llm" = an optional, locally-run
+   * Ollama reply layered on top for conversational fluency — never the source of a task
+   * dispatch, only ever a follow-up explanation. Absent on guest/system messages. */
+  source?: "rule" | "llm";
+  /** Which Ollama model produced this reply, e.g. "llama3.1:8b" — set only when source is
+   * "llm", so the UI can show provenance instead of implying every reply came from the same
+   * place. */
+  model?: string;
 }
 
 export type Scenario = "peak-season" | "monsoon-lull" | "conference-block" | "equipment-crisis" | "vip-arrival";

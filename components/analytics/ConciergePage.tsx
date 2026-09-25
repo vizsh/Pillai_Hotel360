@@ -2,11 +2,12 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { Send, ChevronRight } from "lucide-react";
+import { Send, ChevronRight, Sparkles } from "lucide-react";
 import { useSim } from "@/store/sim";
 import { useTwin } from "@/store/twin";
 import { getModel } from "@/lib/architecture/model";
 import { handleGuestMessage } from "@/lib/intelligence/concierge";
+import type { GuestPromptContext } from "@/lib/ai/conciergePrompt";
 import { fmtClock } from "@/lib/sim/engine";
 import { AnalyticsShell, Card } from "./AnalyticsShell";
 import { Button, Provenance, Stat, Tag } from "@/components/ui/primitives";
@@ -33,12 +34,32 @@ const intentColor: Record<string, string> = {
   unknown: "#5b6879",
 };
 
+type OllamaStatus = { reachable: boolean; chatModelPulled: boolean; embedModelPulled: boolean; models: string[] };
+
 export function ConciergePage() {
   const { state, mutate } = useSim();
   useSim((s) => s.version);
   const model = getModel();
   const [text, setText] = useState("");
   const scroller = useRef<HTMLDivElement>(null);
+  const [aiEnabled, setAiEnabled] = useState(true);
+  const [ollama, setOllama] = useState<OllamaStatus | null>(null);
+  const [thinking, setThinking] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/concierge")
+      .then((r) => r.json())
+      .then((s: OllamaStatus) => {
+        if (!cancelled) setOllama(s);
+      })
+      .catch(() => {
+        if (!cancelled) setOllama({ reachable: false, chatModelPulled: false, embedModelPulled: false, models: [] });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const occupied = Object.values(state.rooms).filter((r) => r.guestId);
   const [roomId, setRoomId] = useState<string | null>(null);
@@ -46,12 +67,46 @@ export function ConciergePage() {
 
   useEffect(() => {
     scroller.current?.scrollTo({ top: scroller.current.scrollHeight, behavior: "smooth" });
-  }, [state.chat.length, activeRoom]);
+  }, [state.chat.length, activeRoom, thinking]);
+
+  const aiReady = ollama?.reachable && ollama.chatModelPulled;
 
   const send = (msg: string) => {
-    if (!msg.trim() || !activeRoom) return;
-    mutate((s) => handleGuestMessage(s, model, activeRoom, msg.trim()));
+    const trimmed = msg.trim();
+    if (!trimmed || !activeRoom) return;
+    mutate((s) => handleGuestMessage(s, model, activeRoom, trimmed));
     setText("");
+
+    if (!aiEnabled || !aiReady) return;
+    const room = state.rooms[activeRoom];
+    const g = room?.guestId ? state.guests[room.guestId] : null;
+    const guestContext: GuestPromptContext | null = g
+      ? {
+          name: g.name,
+          roomNumber: model.roomById.get(activeRoom)!.number,
+          segment: g.segment,
+          loyalty: g.loyalty,
+          vip: g.vip,
+          prefs: g.consentPersonalization ? g.prefs : null,
+        }
+      : null;
+
+    setThinking(true);
+    fetch("/api/concierge", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message: trimmed, guest: guestContext }),
+    })
+      .then((r) => r.json())
+      .then((data: { ok: boolean; reply?: string; model?: string }) => {
+        if (data.ok && data.reply) {
+          mutate((s) => {
+            s.chat.push({ id: `c-${s.chat.length + 1}`, role: "concierge", text: data.reply!, t: s.t, roomId: activeRoom, source: "llm", model: data.model });
+          });
+        }
+      })
+      .catch(() => {})
+      .finally(() => setThinking(false));
   };
 
   const room = activeRoom ? model.roomById.get(activeRoom) : null;
@@ -72,7 +127,7 @@ export function ConciergePage() {
   const dispatched = state.chat.filter((m) => m.role === "concierge" && m.requestId).length;
 
   return (
-    <AnalyticsShell title="AI Concierge" subtitle="Weighted keyword intent classification with urgency detection. Every message is turned into a task and dispatched to a staff agent you can watch on the twin — no external model, fully explainable.">
+    <AnalyticsShell title="AI Concierge" subtitle="Weighted keyword intent classification with urgency detection dispatches every task deterministically — a local Ollama model layers on a grounded, conversational reply, never the source of a dispatch decision.">
       <div className="grid grid-cols-5 gap-4">
         <Stat label="Messages classified" value={String(total)} />
         <Stat label="Tasks dispatched" value={String(dispatched)} sub={total ? `${((dispatched / total) * 100).toFixed(0)}% of messages` : undefined} />
@@ -80,6 +135,28 @@ export function ConciergePage() {
         <Stat label="High urgency" value={String(highUrgency)} accent={highUrgency ? "var(--warm)" : undefined} />
         <Stat label="In-house guests" value={String(occupied.length)} />
       </div>
+
+      <Card title="Local AI assistant (Ollama, RAG-grounded)" right={<Provenance kind="modeled" />}>
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-2">
+            <span className={cn("h-2 w-2 rounded-full", ollama === null ? "bg-low" : aiReady ? "bg-positive" : "bg-critical")} />
+            {ollama === null ? (
+              <span className="text-[12px] text-low">Checking Ollama…</span>
+            ) : !ollama.reachable ? (
+              <span className="text-[12px] text-mid">Ollama not reachable at localhost:11434 — replies fall back to the rule-based classifier only. Run <code className="mono text-accent">ollama serve</code>.</span>
+            ) : !ollama.chatModelPulled ? (
+              <span className="text-[12px] text-mid">Ollama is running, but no chat model is pulled — run <code className="mono text-accent">ollama pull llama3.1:8b</code>.</span>
+            ) : (
+              <span className="text-[12px] text-mid">
+                Connected — chat model <span className="text-hi">llama3.1:8b</span>{ollama.embedModelPulled ? ", RAG retrieval active via nomic-embed-text" : " (no embed model pulled — replies skip retrieval)"}.
+              </span>
+            )}
+          </div>
+          <Button size="sm" variant={aiEnabled ? "primary" : "outline"} onClick={() => setAiEnabled((v) => !v)}>
+            <Sparkles size={12} /> AI replies {aiEnabled ? "on" : "off"}
+          </Button>
+        </div>
+      </Card>
 
       <div className="grid grid-cols-12 gap-4">
         <Card title="In-house guests" className="col-span-3">
@@ -125,7 +202,7 @@ export function ConciergePage() {
             )}
             {roomChat.map((m) => (
               <div key={m.id} className={cn("flex flex-col", m.role === "guest" ? "items-end" : "items-start")}>
-                <div className={cn("max-w-[85%] rounded-xl px-3 py-2 text-[12.5px] leading-snug", m.role === "guest" ? "rounded-br-sm bg-accent/20 text-hi" : "rounded-bl-sm bg-white/[0.06] text-mid")}>{m.text}</div>
+                <div className={cn("max-w-[85%] rounded-xl px-3 py-2 text-[12.5px] leading-snug", m.role === "guest" ? "rounded-br-sm bg-accent/20 text-hi" : m.source === "llm" ? "rounded-bl-sm border border-accent/30 bg-accent/[0.06] text-mid" : "rounded-bl-sm bg-white/[0.06] text-mid")}>{m.text}</div>
                 {m.intent && (
                   <div className="mono mt-0.5 flex items-center gap-1.5 text-[10px] text-low">
                     <span className="uppercase tracking-wider" style={{ color: intentColor[m.intent] }}>
@@ -141,8 +218,21 @@ export function ConciergePage() {
                     )}
                   </div>
                 )}
+                {m.source === "llm" && (
+                  <div className="mono mt-0.5 flex items-center gap-1 text-[10px] text-accent/80">
+                    <Sparkles size={9} />
+                    {m.model ?? "ollama"} · RAG-grounded
+                  </div>
+                )}
               </div>
             ))}
+            {thinking && (
+              <div className="flex flex-col items-start">
+                <div className="rounded-xl rounded-bl-sm border border-accent/30 bg-accent/[0.06] px-3 py-2 text-[11.5px] text-low">
+                  <Sparkles size={11} className="mr-1 inline animate-pulse text-accent" /> thinking… local CPU inference can take up to a minute on a cold model, faster once warmed up
+                </div>
+              </div>
+            )}
           </div>
           <div className="scrollbar-thin flex gap-1 overflow-x-auto border-t border-stroke px-3 py-2">
             {suggestions.map((s) => (

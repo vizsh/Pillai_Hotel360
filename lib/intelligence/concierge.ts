@@ -17,7 +17,7 @@ const intents: Record<Intent, { keywords: [string, number][]; dept: string; sla:
   unknown: { keywords: [], dept: "frontdesk", sla: 20 },
 };
 
-const infoAnswers: [string[], string][] = [
+export const infoAnswers: [string[], string][] = [
   [["pool", "swim"], "The infinity pool on the roof is open 6:00–22:00 and the lagoon pool 7:00–20:00. Towels are at both pool decks."],
   [["breakfast"], "Breakfast at Horizon Restaurant runs 6:30–10:30 daily, in-room breakfast can be pre-ordered until 22:00 the night before."],
   [["wifi", "wi-fi", "password", "internet"], "Wi-Fi is complimentary. Network AzureBay-Guest, password is your room number followed by your surname."],
@@ -107,7 +107,7 @@ export function handleGuestMessage(state: SimState, model: ResortModel, roomId: 
     const staff = dispatchStaff(state, model, req, c.dept === "frontdesk" ? "frontdesk" : c.dept) ?? (tpl ? dispatchStaff(state, model, req, tpl.dept) : null);
     pushFeed(state, "concierge", `Concierge → ${c.requestType} task for ${cell?.number ?? roomId}${staff ? ` · ${staff.name} dispatched` : " · queued"}`, "room", roomId, c.urgency === "high" ? "warn" : "info");
   }
-  state.chat.push({ id: `c-${state.chat.length + 1}`, role: "concierge", text: c.reply, t: state.t, intent: c.intent, requestId, roomId, confidence: c.confidence, urgency: c.urgency });
+  state.chat.push({ id: `c-${state.chat.length + 1}`, role: "concierge", text: c.reply, t: state.t, intent: c.intent, requestId, roomId, confidence: c.confidence, urgency: c.urgency, source: "rule" });
   if (state.chat.length > 80) state.chat.splice(0, state.chat.length - 80);
   return { classified: c, requestId };
 }
