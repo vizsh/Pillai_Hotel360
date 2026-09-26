@@ -68,11 +68,36 @@ const layerEnds: Record<LayerId, [string, string]> = { risk: ["low", "critical"]
 
 export function LeftRail() {
   const { viewMode, setViewMode, isolatedFloor, setIsolatedFloor, activeLayer, setLayer, showStaff, showAlerts, showLabels, showGuests, toggle, tourPlaying, setTour } = useTwin();
+  const autopilot = useUi((s) => s.autopilot);
+  const setAutopilot = useUi((s) => s.setAutopilot);
   const floors = getModel().floors.filter((f) => f.kind === "guest").map((f) => f.index);
   const floorMode = viewMode === "isolate" || viewMode === "room";
 
   return (
     <aside className="scrollbar-thin pointer-events-auto flex h-full w-[220px] shrink-0 flex-col gap-3 overflow-y-auto">
+      <div className={cn("glass flex flex-col gap-1.5 p-2", autopilot && "border border-warm/40")}>
+        <span className="label px-1 pb-1">Operating mode</span>
+        <div className="flex rounded-md bg-white/5 p-0.5">
+          <button
+            onClick={() => setAutopilot(false)}
+            className={cn("flex-1 rounded px-2 py-1.5 text-[11.5px] transition-colors", !autopilot ? "bg-accent/20 text-accent" : "text-low hover:text-hi")}
+          >
+            Manual
+          </button>
+          <button
+            onClick={() => setAutopilot(true)}
+            className={cn("flex-1 rounded px-2 py-1.5 text-[11.5px] transition-colors", autopilot ? "bg-warm/25 text-warm" : "text-low hover:text-hi")}
+          >
+            Autopilot
+          </button>
+        </div>
+        <p className="px-1 text-[10.5px] leading-snug text-low">
+          {autopilot
+            ? "Demo mode: every pending recommendation executes itself on a short countdown — real execution, just without the click. Switch back to Manual any time."
+            : "Every recommendation waits for a human Accept — the default. Switch to Autopilot for a glimpse of a fully automated resort."}
+        </p>
+      </div>
+
       <div className="glass flex flex-col gap-1 p-2">
         <span className="label px-1 pb-1">View</span>
         {modes.map((m) => (

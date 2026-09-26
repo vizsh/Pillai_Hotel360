@@ -128,6 +128,24 @@ components/analytics  deep-dive routes
 
 **Quality tiers** (`store/quality.ts`) auto-degrade on low FPS: DPR, shadows, post-processing, glass transmission and palm density.
 
+### Autopilot — a glimpse of full automation
+
+`Operating mode` at the top of the left rail switches between **Manual** (the default — every
+recommendation waits for a human to click Accept, exactly as everywhere else in this project) and
+**Autopilot** (a demo mode: every pending recommendation counts down for 6 seconds, visibly, then
+calls the exact same `acceptRecommendation()` a manual click would — real execution, not a scripted
+fake sequence). This exists because the single biggest gap between "recommendation system" and
+"autonomous operating system" is the human-approval step — Autopilot removes it live, in front of
+a judge, using 100% of the existing dispatch logic, with a clean way back: switching to Manual
+mid-countdown cancels every pending timer immediately (`components/command/BottomDock.tsx`).
+
+Each auto-execution also frames the affected room on the twin and captions it ("AUTOPILOT" label,
+`store/twin.ts`'s `ask()` — the same mechanism the Ctrl+K "show me" feature uses), so watching
+Autopilot run feels like watching the resort make its own decisions, not just numbers flipping in
+a list. Deliberately scoped to the one aggregated recommendation queue (`BottomDock`) rather than
+retrofitted across every analytics page's own inline recommendation cards — one well-tested surface
+covering every module's recommendations beats several partially-consistent ones.
+
 ### What-if simulator
 
 `Planning → What if…` in the left rail opens a projection panel: drag a hypothetical occupancy and watch recommended RevPAR/ADR, unmet staffing shifts, and inventory reorder counts move — computed by re-running the exact same production functions the Revenue/Operations/Inventory pages use (`computePricing`, `solveRoster`, `assessInventory`) against a cloned state with only `kpis.occupancy` overridden, never the real one (`lib/intelligence/whatIf.ts`). Not a separate toy model and not applied to the live sim — a GM's forecast before a decision, not the decision itself.

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Check, X, ChevronDown, ChevronUp, ChevronsDown, Sparkles, Activity, Bell, Radar } from "lucide-react";
+import { Check, X, ChevronDown, ChevronUp, ChevronsDown, Sparkles, Activity, Bell, Radar, Zap } from "lucide-react";
 import { useSim } from "@/store/sim";
 import { useTwin, type Selection } from "@/store/twin";
 import { useTrace } from "@/store/trace";
@@ -10,6 +10,7 @@ import { useUi } from "@/store/ui";
 import { getModel } from "@/lib/architecture/model";
 import { moduleMeta } from "@/lib/intelligence/registry";
 import { sampleServedRoom } from "@/lib/twin/trace";
+import { roomIdForRecommendation } from "@/lib/twin/queries";
 import { acceptRecommendation, dismissRecommendationLogged } from "@/lib/api/recommendationActions";
 import { fmtClock, resolveAlert } from "@/lib/sim/engine";
 import type { Recommendation } from "@/lib/sim/types";
@@ -27,22 +28,54 @@ function selectionFor(kind: string, id: string): Selection | null {
   return null;
 }
 
+/** How long a pending recommendation counts down before Autopilot executes it — long enough
+ * to read the card and see the number tick down, short enough that a judge watching a handful
+ * of cards isn't left waiting. */
+const AUTOPILOT_DELAY_S = 6;
+
 function RecCard({ rec }: { rec: Recommendation }) {
   const [open, setOpen] = useState(false);
   const mutate = useSim((s) => s.mutate);
   const spotlighted = useDirector((s) => s.spotlightRecId === rec.id);
+  const autopilot = useUi((s) => s.autopilot);
   const meta = moduleMeta[rec.module];
   const model = getModel();
+  const [remaining, setRemaining] = useState(AUTOPILOT_DELAY_S);
   const focus = () => {
     const sel = selectionFor(rec.targetKind, rec.targetId);
     if (sel) useTwin.getState().select(sel);
   };
+
+  useEffect(() => {
+    if (!autopilot || rec.status !== "pending") return;
+    const deadline = Date.now() + AUTOPILOT_DELAY_S * 1000;
+    const tick = () => {
+      const secondsLeft = (deadline - Date.now()) / 1000;
+      if (secondsLeft <= 0) {
+        setRemaining(0);
+        const state = useSim.getState().state;
+        const roomId = roomIdForRecommendation(rec, state, model);
+        acceptRecommendation(mutate, model, rec);
+        if (roomId) useTwin.getState().ask([roomId], `Auto-executed: ${rec.title}`, "AUTOPILOT");
+        return;
+      }
+      setRemaining(secondsLeft);
+    };
+    const id = setInterval(tick, 150);
+    return () => clearInterval(id);
+    // rec.id (not the whole rec object) is the correct dependency here — a new pending
+    // recommendation with the same id never appears mid-countdown, and depending on the
+    // object itself would restart the timer on every unrelated field change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autopilot, rec.status, rec.id, mutate, model]);
+
   return (
     <div
       className={cn(
         "flex w-[360px] shrink-0 flex-col rounded-lg border bg-void/60 p-3 transition-colors",
         rec.status === "pending" ? "border-stroke-lit" : "border-stroke opacity-60",
         spotlighted && "ring-2 ring-accent shadow-[0_0_24px_-6px_var(--accent)]",
+        autopilot && rec.status === "pending" && "border-warm/50 shadow-[0_0_20px_-8px_var(--warm)]",
       )}
       style={{ borderLeftColor: meta.color, borderLeftWidth: 2 }}
     >
@@ -76,12 +109,21 @@ function RecCard({ rec }: { rec: Recommendation }) {
       <div className="mt-3 flex items-center gap-1.5">
         {rec.status === "pending" ? (
           <>
-            <Button size="sm" variant="primary" onClick={() => acceptRecommendation(mutate, model, rec)}>
-              <Check size={12} /> Accept
-            </Button>
-            <Button size="sm" variant="ghost" onClick={() => dismissRecommendationLogged(mutate, rec)}>
-              <X size={12} /> Dismiss
-            </Button>
+            {autopilot ? (
+              <div className="flex items-center gap-2 rounded-md border border-warm/40 bg-warm/10 px-2.5 py-1.5">
+                <Zap size={12} className="animate-pulse text-warm" />
+                <span className="mono text-[11px] text-warm">AUTO · executing in {Math.ceil(remaining)}s</span>
+              </div>
+            ) : (
+              <>
+                <Button size="sm" variant="primary" onClick={() => acceptRecommendation(mutate, model, rec)}>
+                  <Check size={12} /> Accept
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => dismissRecommendationLogged(mutate, rec)}>
+                  <X size={12} /> Dismiss
+                </Button>
+              </>
+            )}
             {rec.module === "maintenance" && rec.targetKind === "asset" && (
               <Button
                 size="icon"
@@ -131,11 +173,15 @@ export function BottomDock() {
       ),
     [],
   );
+  const autopilot = useUi((s) => s.autopilot);
   const recs = Object.values(state.recommendations).sort((a, b) => (a.status === "pending" ? 0 : 1) - (b.status === "pending" ? 0 : 1) || b.confidence - a.confidence);
   const pending = recs.filter((r) => r.status === "pending").length;
   const priorityRecs = recs.filter((r) => r.status === "pending" && r.confidence >= PRIORITY_CONFIDENCE);
   const deferredRecs = recs.filter((r) => !(r.status === "pending" && r.confidence >= PRIORITY_CONFIDENCE));
-  const visibleRecs = showAllRecs ? recs : priorityRecs;
+  // Autopilot forces every pending recommendation into view, priority filter included — the
+  // whole point is watching them all count down, not just the ones already above the
+  // default-visible confidence bar.
+  const visibleRecs = showAllRecs || autopilot ? recs : priorityRecs;
   const alerts = Object.values(state.alerts).filter((a) => !a.resolvedAt).sort((a, b) => ({ critical: 0, warn: 1, info: 2 })[a.severity] - ({ critical: 0, warn: 1, info: 2 })[b.severity] || b.createdAt - a.createdAt);
   const feed = state.feed.slice(-60).reverse();
 
@@ -155,7 +201,12 @@ export function BottomDock() {
             {t.n > 0 && <span className={cn("mono rounded-full px-1.5 text-[10px]", t.id === "alerts" ? "bg-warm/20 text-warm" : "bg-accent/20 text-accent")}>{t.n}</span>}
           </button>
         ))}
-        <span className="ml-auto text-[10.5px] text-low">Accepting a recommendation dispatches it into operations — watch the twin react.</span>
+        {autopilot && (
+          <span className="mono flex items-center gap-1.5 rounded-full border border-warm/50 bg-warm/10 px-2.5 py-1 text-[10px] uppercase tracking-wider text-warm">
+            <Zap size={11} className="animate-pulse" /> Autopilot active
+          </span>
+        )}
+        <span className="ml-auto text-[10.5px] text-low">{autopilot ? "Every recommendation executes on its own — switch back to Manual in the left rail to stop." : "Accepting a recommendation dispatches it into operations — watch the twin react."}</span>
         <Button size="icon" variant="ghost" onClick={() => setCollapsed(!collapsed)} aria-label="Toggle dock">
           {collapsed ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
         </Button>

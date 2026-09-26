@@ -1,6 +1,25 @@
 import { describe, expect, it } from "vitest";
-import { resolveTwinQuery } from "@/lib/twin/queries";
+import { resolveTwinQuery, roomIdForRecommendation } from "@/lib/twin/queries";
+import type { Recommendation } from "@/lib/sim/types";
 import { makeState } from "../helpers";
+
+function makeRec(overrides: Partial<Recommendation>): Recommendation {
+  return {
+    id: "rec-test",
+    module: "maintenance",
+    title: "Test",
+    body: "",
+    confidence: 0.9,
+    basis: [],
+    impact: "",
+    action: "",
+    targetKind: "room",
+    targetId: "room-1",
+    createdAt: 0,
+    status: "pending",
+    ...overrides,
+  };
+}
 
 describe("resolveTwinQuery", () => {
   it("returns null for text that matches no known pattern", () => {
@@ -59,5 +78,38 @@ describe("resolveTwinQuery", () => {
     const res = resolveTwinQuery("vacant and dirty rooms", state, model);
     expect(res).not.toBeNull();
     expect(res!.caption).toMatch(/^\d+ rooms?/);
+  });
+});
+
+describe("roomIdForRecommendation", () => {
+  it("returns the room id directly when the recommendation already targets a room", () => {
+    const { state, model } = makeState();
+    const rec = makeRec({ targetKind: "room", targetId: model.rooms[0].id });
+    expect(roomIdForRecommendation(rec, state, model)).toBe(model.rooms[0].id);
+  });
+
+  it("resolves an asset-targeted recommendation to one of the rooms it actually serves", () => {
+    const { state, model } = makeState();
+    const asset = model.assets[0];
+    const rec = makeRec({ targetKind: "asset", targetId: asset.id });
+    const roomId = roomIdForRecommendation(rec, state, model);
+    expect(roomId).not.toBeNull();
+    const room = model.rooms.find((r) => r.id === roomId);
+    expect(room && asset.servesFloors.includes(room.floor)).toBe(true);
+  });
+
+  it("resolves a guest-targeted recommendation to that guest's actual room", () => {
+    const { state, model } = makeState();
+    const occupiedRoom = model.rooms.find((r) => state.rooms[r.id].guestId);
+    if (!occupiedRoom) return; // no occupied room in this seed — nothing to assert
+    const guestId = state.rooms[occupiedRoom.id].guestId!;
+    const rec = makeRec({ targetKind: "guest", targetId: guestId });
+    expect(roomIdForRecommendation(rec, state, model)).toBe(occupiedRoom.id);
+  });
+
+  it("returns null for a recommendation with no meaningful single room (e.g. resort-wide)", () => {
+    const { state, model } = makeState();
+    const rec = makeRec({ targetKind: "resort", targetId: "weather" });
+    expect(roomIdForRecommendation(rec, state, model)).toBeNull();
   });
 });

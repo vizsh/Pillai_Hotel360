@@ -1,6 +1,7 @@
 import type { ResortModel } from "@/lib/architecture/types";
-import type { SimState } from "@/lib/sim/types";
+import type { Recommendation, SimState } from "@/lib/sim/types";
 import { compositeRisk } from "./colors";
+import { sampleServedRoom } from "./trace";
 
 export interface TwinQueryResult {
   rooms: string[];
@@ -85,5 +86,19 @@ export function resolveTwinQuery(text: string, state: SimState, model: ResortMod
     if (r) return { rooms: [r.id], caption: `Room ${r.number}` };
   }
 
+  return null;
+}
+
+/** Resolves a recommendation to the one room worth pointing the camera at, for Autopilot's
+ * auto-execution caption (components/command/BottomDock.tsx) — reuses the same asset→room
+ * resolution the "Trace to affected room" button already uses, so this never invents a second
+ * way to answer "which room does this asset serve." Recommendations that aren't tied to a
+ * specific room or asset (weather playbooks, resort-wide guidance) correctly resolve to null —
+ * Autopilot still executes and captions them, just without a camera move that wouldn't mean
+ * anything. */
+export function roomIdForRecommendation(rec: Recommendation, state: SimState, model: ResortModel): string | null {
+  if (rec.targetKind === "room") return rec.targetId;
+  if (rec.targetKind === "asset") return sampleServedRoom(model, state, rec.targetId);
+  if (rec.targetKind === "guest") return state.guests[rec.targetId]?.roomId ?? null;
   return null;
 }

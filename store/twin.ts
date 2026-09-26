@@ -35,6 +35,11 @@ interface TwinStore {
    * sidebar shows detail for). Cleared by dismissing the caption or picking a new query. */
   highlighted: string[];
   askCaption: string | null;
+  /** Distinguishes what put a caption on screen — a typed/asked "show me" query
+   * (AskCaption.tsx's default "SHOWING YOU" label) vs. an Autopilot auto-execution
+   * (components/command/BottomDock.tsx, "AUTOPILOT" label) — same bar, same store field,
+   * different one-word context so a judge always knows why the camera moved. */
+  askLabel: string;
   tourPlaying: boolean;
   setViewMode: (m: ViewMode) => void;
   setIsolatedFloor: (f: number | null) => void;
@@ -43,7 +48,7 @@ interface TwinStore {
   select: (s: Selection | null) => void;
   hover: (s: Selection | null) => void;
   setTour: (p: boolean) => void;
-  ask: (rooms: string[], caption: string) => void;
+  ask: (rooms: string[], caption: string, label?: string) => void;
   dismissAsk: () => void;
 }
 
@@ -61,6 +66,7 @@ export const useTwin = create<TwinStore>()(
     hovered: null,
     highlighted: [],
     askCaption: null,
+    askLabel: "SHOWING YOU",
     tourPlaying: false,
     setViewMode: (viewMode) =>
       set((s) => ({
@@ -75,7 +81,7 @@ export const useTwin = create<TwinStore>()(
     select: (selected) => set({ selected }),
     hover: (hovered) => set({ hovered }),
     setTour: (tourPlaying) => set({ tourPlaying }),
-    ask: (highlighted, askCaption) => set({ highlighted, askCaption }),
+    ask: (highlighted, askCaption, askLabel = "SHOWING YOU") => set({ highlighted, askCaption, askLabel }),
     dismissAsk: () => set({ highlighted: [], askCaption: null }),
   })),
 );
