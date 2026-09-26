@@ -97,7 +97,7 @@ export async function chatRaw(messages: ChatTurn[], tools?: readonly unknown[]):
     const res = await fetch(`${OLLAMA_HOST}/api/chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ model: OLLAMA_CHAT_MODEL, messages, tools, stream: false, options: { temperature: 0.4, num_ctx: 4096 } }),
+      body: JSON.stringify({ model: OLLAMA_CHAT_MODEL, messages, tools, stream: false, options: { temperature: 0.3, num_ctx: 8192 } }),
       signal: AbortSignal.timeout(tools ? TOOL_CHAT_TIMEOUT_MS : CHAT_TIMEOUT_MS),
     });
     if (!res.ok) return null;

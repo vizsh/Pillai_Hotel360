@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getModel } from "@/lib/architecture/model";
 import { buildKnowledgeBase, type KnowledgeDoc } from "@/lib/ai/knowledge";
 import { chat, embed, OLLAMA_CHAT_MODEL, ollamaStatus } from "@/lib/ai/ollama";
-import { buildSystemPrompt, GUARDRAIL_FALLBACK_REPLY, violatesGuardrails, type GuestPromptContext } from "@/lib/ai/conciergePrompt";
+import { buildSystemPrompt, correctTierEligibility, GUARDRAIL_FALLBACK_REPLY, violatesGuardrails, type GuestPromptContext } from "@/lib/ai/conciergePrompt";
 import { retrieveTopK, type EmbeddedDoc } from "@/lib/ai/rag";
 
 const TOP_K = 4;
@@ -73,5 +73,11 @@ export async function POST(req: Request) {
   if (violatesGuardrails(reply)) {
     return NextResponse.json({ ok: true, reply: GUARDRAIL_FALLBACK_REPLY, model: OLLAMA_CHAT_MODEL, guardrailTripped: true, retrievedCount: retrieved.length });
   }
+
+  const tierCorrected = correctTierEligibility(reply, guest ?? null);
+  if (tierCorrected) {
+    return NextResponse.json({ ok: true, reply: tierCorrected, model: OLLAMA_CHAT_MODEL, guardrailTripped: true, retrievedCount: retrieved.length });
+  }
+
   return NextResponse.json({ ok: true, reply, model: OLLAMA_CHAT_MODEL, guardrailTripped: false, retrievedCount: retrieved.length });
 }

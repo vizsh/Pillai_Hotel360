@@ -23,7 +23,7 @@ export const infoAnswers: [string[], string][] = [
   [["wifi", "wi-fi", "password", "internet"], "Wi-Fi is complimentary. Network AzureBay-Guest, password is your room number followed by your surname."],
   [["spa"], "Serenity Spa is open 9:00–21:00. I can hold a slot for you now if you tell me a preferred time."],
   [["gym", "fitness"], "The fitness centre on the ground floor is open 24 hours with your room key."],
-  [["checkout", "check-out", "check out"], "Standard checkout is 11:00. Late checkout until 14:00 is complimentary for loyalty members, subject to availability."],
+  [["checkout", "check-out", "check out"], "Standard checkout is 11:00. Complimentary late checkout until 14:00 is reserved for Gold and Platinum loyalty members, subject to availability — I'm happy to check whether a later checkout can still be arranged for anyone else."],
   [["beach"], "The private beach is directly south of the lagoon pool, with lifeguards 7:00–19:00 and cabanas bookable through me."],
   [["restaurant", "dinner", "bar"], "Horizon Restaurant serves 12:00–23:00 and the Sky Bar on the roof from 17:00 until late. Sunset is around 18:40."],
   [["weather"], "Tomorrow looks clear with a high of 31°C and a light sea breeze in the afternoon."],
