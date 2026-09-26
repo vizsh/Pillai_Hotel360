@@ -37,7 +37,52 @@ export function weatherForDay(seed: number, dayIndex: number, scenario: SimState
   return { dayOffset: 0, condition, tempC, rainProbability };
 }
 
+/** The adapter seam: a client-only hook (hooks/useLiveWeather.ts) populates this from a real
+ * API (app/api/weather, Open-Meteo) on an interval and calls setLiveWeather(); every other
+ * caller here — the recommendation engine, the Operations page — keeps calling
+ * forecastWeather(state) exactly as before and transparently gets real data once it's
+ * available, simulated data otherwise. Stored on globalThis rather than a plain module-level
+ * `let`, for the same reason lib/db/client.ts does — confirmed live (not just in theory) that
+ * a plain module-level variable here did NOT stay shared between the hook's import of this
+ * file and the Operations page's import of it: Next.js's client/server module graph split
+ * gave each its own copy, so setLiveWeather() from the hook was silently invisible to
+ * weatherSource() called from the page. globalThis is one real object in both the browser
+ * (window) and any single Node process, so this can't happen again regardless of how the
+ * bundler splits the module. */
+declare global {
+  var __liveWeather: { days: LiveWeatherCondition[]; fetchedAt: number } | null | undefined;
+}
+const LIVE_WEATHER_STALE_MS = 3 * 60 * 60 * 1000;
+
+export interface LiveWeatherCondition {
+  dayOffset: number;
+  tempC: number;
+  rainProbability: number;
+}
+
+export function setLiveWeather(days: LiveWeatherCondition[] | null) {
+  globalThis.__liveWeather = days ? { days, fetchedAt: Date.now() } : null;
+}
+
+/** "live" once real data has been set and isn't stale, "simulated" otherwise — surfaced in
+ * the UI (Operations page's Provenance tag) so a real vs. seeded forecast is never presented
+ * as the same thing. */
+export function weatherSource(): "live" | "simulated" {
+  const lw = globalThis.__liveWeather;
+  return lw && Date.now() - lw.fetchedAt < LIVE_WEATHER_STALE_MS ? "live" : "simulated";
+}
+
+function conditionFor(tempC: number, rainProbability: number): WeatherCondition {
+  if (tempC >= 34) return "heatwave";
+  if (rainProbability >= 0.5) return "rain";
+  return "clear";
+}
+
 export function forecastWeather(state: SimState): WeatherDay[] {
+  const lw = globalThis.__liveWeather;
+  if (weatherSource() === "live" && lw) {
+    return lw.days.slice(0, HORIZON_DAYS).map((d) => ({ dayOffset: d.dayOffset, tempC: d.tempC, rainProbability: d.rainProbability, condition: conditionFor(d.tempC, d.rainProbability) }));
+  }
   const startDay = Math.floor(state.t / DAY);
   const out: WeatherDay[] = [];
   for (let offset = 0; offset < HORIZON_DAYS; offset++) {

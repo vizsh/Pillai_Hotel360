@@ -8,6 +8,7 @@ import { useUi } from "@/store/ui";
 import { useSession } from "@/store/session";
 import { useSimLoop } from "@/hooks/useSimLoop";
 import { useTelegramInbox } from "@/hooks/useTelegramInbox";
+import { useLiveWeather } from "@/hooks/useLiveWeather";
 import { TopBar } from "./TopBar";
 import { LeftRail } from "./LeftRail";
 import { ContextPanel } from "./ContextPanel";
@@ -30,6 +31,7 @@ const keyLayers: Record<string, LayerId> = { u: "risk", q: "occupancy", w: "main
 export function CommandCenter() {
   useSimLoop();
   useTelegramInbox();
+  useLiveWeather();
   const whatIfOpen = useUi((s) => s.whatIfOpen);
   const setWhatIf = useUi((s) => s.setWhatIf);
   const hydrate = useSession((s) => s.hydrate);

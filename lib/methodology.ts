@@ -88,6 +88,6 @@ export const methodology: Record<ModuleId, MethodologyEntry> = {
     file: "lib/intelligence/weather.ts",
     benchmark: "Weather-aware operations (moving activities indoors, adjusting staffing and menus for rain; prioritizing AC maintenance ahead of a heat wave) is standard playbook practice for leisure resorts, and heat-linked HVAC failure risk is a named, real operational pattern.",
     source: "Operational practice, not a single external benchmark",
-    realWorldNote: "No real weather API is called — the edge/on-prem architecture this project targets doesn't assume outbound internet, so weather is a seeded, deterministic per-day forecast (SIMULATED, tagged as such). A real deployment would swap in Open-Meteo or a similar free API with zero change to the playbook logic below it.",
+    realWorldNote: "The one module with a real external integration built, not just described: app/api/weather calls Open-Meteo live (no API key) for Goa, India, refreshed automatically every 20 minutes (hooks/useLiveWeather.ts) — the playbook logic below never changed to accommodate this, since the adapter swaps in behind forecastWeather()'s existing signature. Falls back to the seeded deterministic forecast (still SIMULATED, tagged as such) if the API is unreachable, same fail-soft convention as lib/ai/ollama.ts. A real deployment would point the same route at the actual property's coordinates.",
   },
 };

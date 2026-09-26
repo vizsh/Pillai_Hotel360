@@ -89,7 +89,9 @@ Two ways to explore the twin beyond point-and-read:
 
 ## What is real and what is simulated
 
-**Everything numeric is synthetic.** A seeded engine (`lib/sim`) generates the property, guests, staff, telemetry, requests, reviews and revenue. Same seed, same run. The UI tags values as `SIMULATED` (raw sim state), `MODELED` (output of an intelligence module) or `DERIVED` (aggregation). No real property or guest data is used or implied.
+**Everything numeric is synthetic** — except one signal, deliberately. A seeded engine (`lib/sim`) generates the property, guests, staff, telemetry, requests, reviews and revenue. Same seed, same run. The UI tags values as `SIMULATED` (raw sim state), `MODELED` (output of an intelligence module) or `DERIVED` (aggregation). No real property or guest data is used or implied.
+
+**The one real external integration: weather.** Every other module's own methodology entry names its real-world swap-in as future work (real PMS, real IoT, real POS). Weather was built as that swap for real, not just described — `app/api/weather` calls Open-Meteo (no API key, CORS-open) for Goa, India (a stand-in coordinate for "Azure Bay Resort"), cached 20 minutes server-side; `hooks/useLiveWeather.ts` polls it automatically on the same cadence, no manual refresh; `lib/intelligence/weather.ts` prefers the real forecast once it arrives and falls back to the deterministic seeded one otherwise — the *rain/heatwave playbook logic* consuming it never changes either way. The Operations page's weather card labels which one is currently live (`live · open-meteo` vs `simulated`), honestly, rather than presenting both the same way.
 
 The *models* are real implementations, not stubs:
 

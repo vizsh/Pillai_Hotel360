@@ -5,7 +5,7 @@ import { useSim } from "@/store/sim";
 import { useTwin } from "@/store/twin";
 import { getModel } from "@/lib/architecture/model";
 import { assessHousekeepingFatigue, assessStaffFairness, BURNOUT_THRESHOLD, depts, forecastDemand, optimizeHousekeepingAssignment, solveRoster, STANDARD_ROOMS_PER_HK_SHIFT } from "@/lib/intelligence/staffing";
-import { forecastWeather } from "@/lib/intelligence/weather";
+import { forecastWeather, weatherSource } from "@/lib/intelligence/weather";
 import { detectCausalChains } from "@/lib/intelligence/causalChain";
 import { deptColors } from "@/lib/twin/colors";
 import { acceptRecommendation } from "@/lib/api/recommendationActions";
@@ -28,6 +28,7 @@ export function OperationsPage() {
   const onTime = done.filter((r) => (r.completedAt ?? 0) - r.createdAt <= r.slaMin).length;
   const hkFatigue = assessHousekeepingFatigue(state);
   const weather = forecastWeather(state);
+  const liveWeather = weatherSource() === "live";
   const weatherRecs = Object.values(state.recommendations).filter((r) => r.module === "weather" && r.status === "pending");
   const chains = detectCausalChains(state, model);
   const stageLabel: Record<string, string> = { complaint: "Complaint", diagnosis: "Diagnosis", workorder: "Work order", relocation: "Relocation", recovery: "Recovery" };
@@ -203,7 +204,20 @@ export function OperationsPage() {
         </p>
       </Card>
 
-      <Card title="Weather & event radar · 7-day" right={<Provenance kind="modeled" module="weather" />}>
+      <Card
+        title="Weather & event radar · 7-day"
+        right={
+          <div className="flex items-center gap-1.5">
+            <span
+              className={cn("mono rounded px-1.5 py-0.5 text-[9.5px] uppercase tracking-wider", liveWeather ? "bg-positive/15 text-positive" : "bg-white/5 text-low")}
+              title={liveWeather ? "Real forecast from Open-Meteo for Goa, India (app/api/weather) — refreshes automatically every 20 minutes" : "No live forecast reachable right now — showing the seeded deterministic forecast instead"}
+            >
+              {liveWeather ? "live · open-meteo" : "simulated"}
+            </span>
+            <Provenance kind="modeled" module="weather" />
+          </div>
+        }
+      >
         <div className="flex gap-2 overflow-x-auto pb-1">
           {weather.map((d) => (
             <div

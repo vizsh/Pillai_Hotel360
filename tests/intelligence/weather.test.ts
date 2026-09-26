@@ -1,7 +1,36 @@
-import { describe, expect, it } from "vitest";
-import { forecastWeather, weatherForDay, weatherRecommendations } from "@/lib/intelligence/weather";
+import { afterEach, describe, expect, it } from "vitest";
+import { forecastWeather, setLiveWeather, weatherForDay, weatherRecommendations, weatherSource } from "@/lib/intelligence/weather";
 import { DAY } from "@/lib/sim/seed";
 import { makeState } from "../helpers";
+
+afterEach(() => setLiveWeather(null));
+
+describe("the live-weather adapter seam", () => {
+  it("reports 'simulated' when no live data has ever been set", () => {
+    expect(weatherSource()).toBe("simulated");
+  });
+
+  it("reports 'live' and returns the real days once set, without needing any state/model", () => {
+    setLiveWeather([
+      { dayOffset: 0, tempC: 31, rainProbability: 0.1 },
+      { dayOffset: 1, tempC: 36, rainProbability: 0.05 },
+      { dayOffset: 2, tempC: 25, rainProbability: 0.8 },
+    ]);
+    expect(weatherSource()).toBe("live");
+    const { state } = makeState();
+    const days = forecastWeather(state);
+    expect(days[0]).toMatchObject({ dayOffset: 0, tempC: 31, condition: "clear" });
+    expect(days[1]).toMatchObject({ dayOffset: 1, tempC: 36, condition: "heatwave" });
+    expect(days[2]).toMatchObject({ dayOffset: 2, tempC: 25, condition: "rain" });
+  });
+
+  it("falls back to the deterministic simulated forecast once live data is cleared", () => {
+    setLiveWeather([{ dayOffset: 0, tempC: 40, rainProbability: 0 }]);
+    expect(weatherSource()).toBe("live");
+    setLiveWeather(null);
+    expect(weatherSource()).toBe("simulated");
+  });
+});
 
 describe("weatherForDay", () => {
   it("is deterministic for the same seed, day index and scenario", () => {
