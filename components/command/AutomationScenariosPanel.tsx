@@ -8,24 +8,36 @@ import { useTwin } from "@/store/twin";
 import { getModel } from "@/lib/architecture/model";
 import { moduleMeta } from "@/lib/intelligence/registry";
 import { handleGuestMessage } from "@/lib/intelligence/concierge";
-import { applyGuestAppOrder } from "@/lib/sim/actions";
+import { applyGuestAppOrder, completeRequestExternally } from "@/lib/sim/actions";
 import { acceptRecommendation } from "@/lib/api/recommendationActions";
-import { refreshRecommendations } from "@/lib/sim/engine";
-import { SCENARIOS, triggerSoftMaintenanceIssue, triggerAssetFailure, pickOccupiedRoom, type ScenarioDef } from "@/lib/sim/scenarioCatalog";
+import { fmtClock, tick } from "@/lib/sim/engine";
+import {
+  SCENARIOS,
+  triggerSoftMaintenanceIssue,
+  triggerAssetFailure,
+  triggerPersonalizationVip,
+  tickForwardStep,
+  pickOccupiedRoom,
+  isPhysicalScenario,
+  type ScenarioDef,
+} from "@/lib/sim/scenarioCatalog";
 import type { Recommendation, SimState } from "@/lib/sim/types";
 import { Button, Tag } from "@/components/ui/primitives";
 import { cn } from "@/lib/utils";
 
 const BRIEF_SECONDS = 4;
+const TICK_FORWARD_CAP = 12; // 12 x 30min = 6 simulated hours before an honest miss
+const ENROUTE_STEP_MIN = 4; // sim-minutes advanced per animation frame while a staff member walks
+const ENROUTE_FRAME_MS = 260;
+const ENROUTE_MAX_FRAMES = 90; // ~5.5 simulated hours of safety cap before force-completing
 
-type Step = "list" | "brief" | "running" | "resolved" | "miss";
+type Step = "list" | "brief" | "run" | "resolved" | "miss";
+type Sel = { kind: "room" | "asset"; id: string };
 
-/** Reads out loud (via the twin's ask caption + this panel) exactly what a real accept/execute
- * already does — no scripted outcome text, the sentence below is built from the actual
- * recommendation/request object the module produced. */
-function outcomeFor(rec: Recommendation | null, fallback: string): string {
-  if (!rec) return fallback;
-  return `${rec.action} ${rec.impact ? `— ${rec.impact}` : ""}`.trim();
+const dept = (d: string) => d[0].toUpperCase() + d.slice(1);
+
+function sleep(ms: number) {
+  return new Promise((r) => setTimeout(r, ms));
 }
 
 function findMatch(state: SimState, scn: ScenarioDef): Recommendation | null {
@@ -39,15 +51,20 @@ export function AutomationScenariosPanel() {
   const [step, setStep] = useState<Step>("list");
   const [scn, setScn] = useState<ScenarioDef | null>(null);
   const [remaining, setRemaining] = useState(BRIEF_SECONDS);
+  const [log, setLog] = useState<string[]>([]);
+  const [progress, setProgress] = useState<{ pct: number; label: string } | null>(null);
   const [outcome, setOutcome] = useState("");
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const runIdRef = useRef(0);
+  const briefTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const model = getModel();
+
+  const append = (line: string) => setLog((prev) => [...prev, line]);
 
   const close = () => {
     useUi.getState().setScenarioPanelOpen(false);
     setStep("list");
     setScn(null);
-    if (timerRef.current) clearInterval(timerRef.current);
+    if (briefTimerRef.current) clearInterval(briefTimerRef.current);
   };
 
   const pick = (s: ScenarioDef) => {
@@ -56,103 +73,273 @@ export function AutomationScenariosPanel() {
     setRemaining(BRIEF_SECONDS);
   };
 
-  const run = (s: ScenarioDef) => {
-    if (timerRef.current) clearInterval(timerRef.current);
-    setStep("running");
+  const focus = (sel: Sel, caption: string) => {
+    useTwin.getState().select(sel);
+    const roomId = sel.kind === "room" ? sel.id : (model.rooms.find((r) => model.assetById.get(sel.id)?.servesFloors.includes(r.floor))?.id ?? model.rooms[0].id);
+    useTwin.getState().ask([roomId], caption, "SCENARIO");
+  };
+
+  const run = async (s: ScenarioDef) => {
+    if (briefTimerRef.current) clearInterval(briefTimerRef.current);
+    const myRun = ++runIdRef.current;
+    const stale = () => myRun !== runIdRef.current;
+    setLog([]);
+    setProgress(null);
+    setStep("run");
     const mutate = useSim.getState().mutate;
 
-    window.setTimeout(() => {
-      let result: { ok: true; roomOrAsset: { kind: "room" | "asset"; id: string }; rec: Recommendation | null; text?: string } | { ok: false } = { ok: false };
-
-      if (s.kind === "asset-soft") {
-        let assetId: string | null = null;
-        mutate((st) => {
-          assetId = triggerSoftMaintenanceIssue(st, model);
-        });
-        if (assetId) {
-          const rec = useSim.getState().state.recommendations[`rec-maint-${assetId}`] ?? null;
-          result = { ok: true, roomOrAsset: { kind: "asset", id: assetId }, rec };
+    if (isPhysicalScenario(s.kind)) {
+      // --- Physical scenarios: a real ServiceRequest gets created, a real staff member gets
+      // dispatched, and the walk + service time is driven by the actual tick() loop — not a
+      // fake progress bar. Sim is paused for the duration so wall-clock demo pacing is
+      // decoupled from whatever global speed the presenter has set elsewhere.
+      let target: { kind: "room"; id: string; number: string } | null = null;
+      let incomingText = "";
+      if (s.kind === "guest-message") {
+        const room = pickOccupiedRoom(useSim.getState().state, model);
+        if (room) {
+          target = { kind: "room", id: room.id, number: room.number };
+          incomingText = '"The AC in my room isn\'t working and it\'s really hot, can someone come now please"';
         }
-      } else if (s.kind === "asset-failure") {
-        let assetId: string | null = null;
+      } else if (s.kind === "guest-app-order") {
+        const room = pickOccupiedRoom(useSim.getState().state, model);
+        if (room) {
+          target = { kind: "room", id: room.id, number: room.number };
+          incomingText = "room_service: 2x Club Sandwich, 1x Coffee (via guestexperience app)";
+        }
+      }
+      // asset-failure has no room to peek at in advance — the affected rooms only become known
+      // once the fault is injected and relocation/guest-impact recompute against it.
+
+      append(s.kind === "asset-failure" ? "Reading live telemetry across all monitored plant…" : `Incoming signal: ${incomingText}`);
+      await sleep(1100);
+      if (stale()) return;
+
+      let assetId: string | null = null;
+      let requestId: string | undefined;
+      let guestName = "Guest";
+      let intent = "";
+
+      if (s.kind === "asset-failure") {
         mutate((st) => {
           assetId = triggerAssetFailure(st, model);
         });
-        if (assetId) {
-          const relocRec = Object.values(useSim.getState().state.recommendations).find((r) => r.module === "relocation" && r.targetId === assetId && r.status === "pending") ?? null;
-          result = { ok: true, roomOrAsset: { kind: "asset", id: assetId }, rec: relocRec, text: relocRec ? undefined : "Emergency repair dispatched — no occupied rooms were affected on this pass." };
+        if (!assetId) {
+          setStep("miss");
+          return;
         }
-      } else if (s.kind === "guest-message") {
-        const target = pickOccupiedRoom(useSim.getState().state, model);
-        if (target) {
-          let requestId: string | undefined;
-          let intent = "";
-          mutate((st) => {
-            const r = handleGuestMessage(st, model, target.id, "The AC in my room isn't working and it's really hot, can someone come now please");
+        const asset = model.assetById.get(assetId)!;
+        const st = useSim.getState().state.assets[assetId];
+        append(`${asset.name}: temperature ${st.temp.toFixed(0)}° (baseline ${st.tempBase.toFixed(0)}°), vibration ${st.vibration.toFixed(0)} (baseline ${st.vibBase.toFixed(0)}) → status FAILED`);
+        await sleep(1000);
+        if (stale()) return;
+        append(`Failure probability 100% (7-day model) — emergency repair authorized without waiting for human sign-off`);
+        const req = Object.values(useSim.getState().state.requests).find((r) => r.roomId === assetId && r.text === "Emergency repair");
+        requestId = req?.id;
+        target = { kind: "room", id: model.rooms.find((r) => model.assetById.get(assetId!)?.servesFloors.includes(r.floor))?.id ?? model.rooms[0].id, number: asset.name };
+      } else if (target) {
+        mutate((st) => {
+          if (s.kind === "guest-message") {
+            const g = st.rooms[target!.id]?.guestId ? st.guests[st.rooms[target!.id].guestId!] : null;
+            guestName = g?.name ?? "Guest";
+            const r = handleGuestMessage(st, model, target!.id, "The AC in my room isn't working and it's really hot, can someone come now please");
             requestId = r.requestId;
             intent = r.classified.intent;
-          });
-          const req = requestId ? useSim.getState().state.requests[requestId] : null;
-          result = { ok: true, roomOrAsset: { kind: "room", id: target.id }, rec: null, text: req ? `Classified as "${intent}" and dispatched to ${req.type} — SLA ${req.slaMin} min.` : "Classified as smalltalk/info — no ticket was needed." };
-        }
-      } else if (s.kind === "guest-app-order") {
-        const target = pickOccupiedRoom(useSim.getState().state, model);
-        if (target) {
-          let guestName = "Guest";
-          mutate((st) => {
-            const g = st.rooms[target.id]?.guestId ? st.guests[st.rooms[target.id].guestId!] : null;
+          } else {
+            const g = st.rooms[target!.id]?.guestId ? st.guests[st.rooms[target!.id].guestId!] : null;
             guestName = g?.name ?? "Guest";
-            applyGuestAppOrder(st, model, target.id, guestName, "room_service", "Room service (guest app): 2x Club Sandwich, 1x Coffee");
-          });
-          result = { ok: true, roomOrAsset: { kind: "room", id: target.id }, rec: null, text: `${guestName}'s order dispatched to F&B — attributed to the guest app, not a phone call.` };
+            const req = applyGuestAppOrder(st, model, target!.id, guestName, "room_service", "Room service (guest app): 2x Club Sandwich, 1x Coffee");
+            requestId = req.id;
+          }
+        });
+        if (s.kind === "guest-message") {
+          append(requestId ? `Keyword classifier: intent="${intent}" → routes to ${useSim.getState().state.requests[requestId]?.type}, urgency HIGH ("now")` : `Keyword classifier: intent="smalltalk" — no ticket needed`);
+        } else {
+          append(`guestexperience type "room_service" → internal type "fnb" (lib/integration/guestAppAdapter.ts)`);
         }
+        await sleep(1000);
+        if (stale()) return;
       } else {
-        mutate((st) => refreshRecommendations(st, model));
-        const rec = findMatch(useSim.getState().state, s);
-        if (rec) {
-          const sel = rec.targetKind === "room" || rec.targetKind === "asset" ? { kind: rec.targetKind as "room" | "asset", id: rec.targetId } : { kind: "room" as const, id: model.rooms[0].id };
-          result = { ok: true, roomOrAsset: sel, rec };
-        }
-      }
-
-      if (!result.ok) {
         setStep("miss");
         return;
       }
 
-      const sel = result.roomOrAsset;
-      useTwin.getState().select(sel);
-      const label = result.rec ? outcomeFor(result.rec, "") : (result.text ?? "");
-      const captionRoomId =
-        sel.kind === "room" ? sel.id : (model.rooms.find((r) => model.assetById.get(sel.id)?.servesFloors.includes(r.floor))?.id ?? model.rooms[0].id);
-      useTwin.getState().ask([captionRoomId], `AUTOMATED · ${s.title}`, "SCENARIO");
-
-      window.setTimeout(() => {
-        if (result.ok && result.rec && result.rec.status === "pending") {
-          acceptRecommendation(useSim.getState().mutate, model, result.rec);
-          setOutcome(outcomeFor(useSim.getState().state.recommendations[result.rec.id] ?? result.rec, label));
-        } else {
-          setOutcome(label || "Action applied.");
-        }
+      if (!requestId) {
+        setOutcome(s.kind === "guest-message" ? "Classified as low-priority — no dispatch needed this pass." : "No occupied room was available to place the order from.");
         setStep("resolved");
-      }, 1200);
-    }, 350);
+        return;
+      }
+
+      const req = useSim.getState().state.requests[requestId];
+      const staff = req.assignedTo ? useSim.getState().state.staff[req.assignedTo] : null;
+      focus(target, `AUTOMATED · ${s.title}`);
+
+      if (!staff) {
+        append(`No ${req.type} staff currently free — queued, will dispatch the moment someone is.`);
+        setOutcome(`${req.text} — queued for ${req.type}.`);
+        setStep("resolved");
+        return;
+      }
+
+      append(`Dispatched ${staff.name} (${dept(staff.dept)}) → ${target.number} · ${staff.path.length} waypoints · SLA ${req.slaMin} min`);
+      await sleep(700);
+      if (stale()) return;
+
+      const wasPaused = useSim.getState().state.paused;
+      if (!wasPaused) useSim.getState().setPaused(true);
+      setProgress({ pct: 0, label: `${staff.name} en route to ${target.number}…` });
+
+      for (let i = 0; i < ENROUTE_MAX_FRAMES; i++) {
+        if (stale()) return;
+        const liveReq = useSim.getState().state.requests[requestId];
+        if (liveReq.status === "done") break;
+        mutate((st) => tick(st, model, ENROUTE_STEP_MIN));
+        const s2 = useSim.getState().state;
+        const liveStaff = s2.staff[req.assignedTo!];
+        const liveReq2 = s2.requests[requestId];
+        if (liveReq2.status === "done") break;
+        if (liveStaff.status === "moving") {
+          const pct = Math.round((liveStaff.pathIdx / Math.max(1, liveStaff.path.length)) * 60);
+          setProgress({ pct, label: `${liveStaff.name} walking → ${target.number} (${liveStaff.pathIdx}/${liveStaff.path.length} waypoints)` });
+        } else if (liveStaff.status === "working") {
+          const workPct = clampPct(60 + ((s2.t - (liveReq2.createdAt ?? s2.t)) / Math.max(1, req.slaMin)) * 40);
+          setProgress({ pct: workPct, label: `${liveStaff.name} on site, servicing — ETA ${fmtClock(liveStaff.workUntil)}` });
+        }
+        await sleep(ENROUTE_FRAME_MS);
+      }
+      if (stale()) return;
+
+      let finalReq = useSim.getState().state.requests[requestId];
+      if (finalReq.status !== "done") {
+        mutate((st) => completeRequestExternally(st, model, requestId!, staff.name));
+        finalReq = useSim.getState().state.requests[requestId];
+      }
+      if (!wasPaused) useSim.getState().setPaused(false);
+      setProgress({ pct: 100, label: "Done" });
+      append(`${staff.name} completed the job at ${fmtClock(finalReq.completedAt ?? useSim.getState().state.t)} — request marked done.`);
+
+      if (s.kind === "asset-failure" && assetId) {
+        const relocRec = Object.values(useSim.getState().state.recommendations).find((r) => r.module === "relocation" && r.targetId === assetId && r.status === "pending");
+        if (relocRec) {
+          await sleep(500);
+          append(`${relocRec.title} — matching displaced guests against vacant-clean inventory…`);
+          acceptRecommendation(mutate, model, relocRec);
+          await sleep(400);
+          const executed = useSim.getState().state.recommendations[relocRec.id];
+          append(executed?.action ?? relocRec.action);
+        }
+      }
+
+      setOutcome(s.kind === "guest-message" ? `Classified as "${intent}" and resolved by ${staff.name} — SLA ${req.slaMin} min.` : s.kind === "guest-app-order" ? `${guestName}'s order delivered by ${staff.name}.` : `Emergency repair completed by ${staff.name}${assetId ? ` on ${model.assetById.get(assetId)!.name}` : ""}.`);
+      setStep("resolved");
+      return;
+    }
+
+    // --- Administrative scenarios: no physical walk, but every number shown below is read
+    // straight off the real recommendation object the module produced.
+    if (s.kind === "asset-soft") {
+      append("Scanning plant telemetry for the asset closest to its own service threshold…");
+      await sleep(900);
+      if (stale()) return;
+      let assetId: string | null = null;
+      mutate((st) => {
+        assetId = triggerSoftMaintenanceIssue(st, model);
+      });
+      if (!assetId) {
+        setStep("miss");
+        return;
+      }
+      const asset = model.assetById.get(assetId)!;
+      const st = useSim.getState().state.assets[assetId];
+      append(`${asset.name}: temp ${st.temp.toFixed(0)}° (+${(((st.temp - st.tempBase) / st.tempBase) * 100).toFixed(0)}% vs baseline), vibration +${(((st.vibration - st.vibBase) / st.vibBase) * 100).toFixed(0)}% vs baseline`);
+      await sleep(1000);
+      if (stale()) return;
+      const rec = useSim.getState().state.recommendations[`rec-maint-${assetId}`] ?? null;
+      focus({ kind: "asset", id: assetId }, `AUTOMATED · ${s.title}`);
+      await runRecOutcome(rec, `Weibull hazard model recomputed — failure probability now past the 35% action threshold`, mutate);
+      return;
+    }
+
+    // recommendation-kind: search live, fall back to nudging the exact precondition (personalization
+    // only, where it's cheap and safe), then to advancing the real sim clock in visible steps.
+    append(`Scanning ${moduleMeta[s.module].label} for a live match…`);
+    await sleep(800);
+    if (stale()) return;
+
+    let rec = findMatch(useSim.getState().state, s);
+    if (!rec && s.id === "personalization-vip") {
+      let guestId: string | null = null;
+      mutate((st) => {
+        guestId = triggerPersonalizationVip(st, model);
+      });
+      if (guestId) {
+        const g = useSim.getState().state.guests[guestId];
+        append(`${g.name} · ${model.roomById.get(g.roomId!)!.number}: preference profile updated (sea-view) — a matching vacant-clean room exists`);
+        await sleep(800);
+        if (stale()) return;
+      }
+      rec = findMatch(useSim.getState().state, s);
+    }
+
+    let advanced = 0;
+    while (!rec && advanced < TICK_FORWARD_CAP) {
+      mutate((st) => tickForwardStep(st, model, 30));
+      advanced++;
+      append(`No live match yet — advancing the clock to ${fmtClock(useSim.getState().state.t)} for the model to re-evaluate…`);
+      await sleep(280);
+      if (stale()) return;
+      rec = findMatch(useSim.getState().state, s);
+    }
+
+    if (!rec) {
+      setStep("miss");
+      return;
+    }
+
+    append(`Match found: ${rec.title}`);
+    await sleep(700);
+    if (stale()) return;
+    for (const b of rec.basis.slice(0, 3)) append(`· ${b}`);
+    append(`Confidence ${(rec.confidence * 100).toFixed(0)}%`);
+    await sleep(900);
+    if (stale()) return;
+    const sel: Sel = rec.targetKind === "room" || rec.targetKind === "asset" ? { kind: rec.targetKind, id: rec.targetId } : { kind: "room", id: model.rooms[0].id };
+    focus(sel, `AUTOMATED · ${s.title}`);
+    await runRecOutcome(rec, null, mutate);
   };
+
+  async function runRecOutcome(rec: Recommendation | null, extraLine: string | null, mutate: (fn: (s: SimState) => void) => void) {
+    if (!rec) {
+      setStep("miss");
+      return;
+    }
+    if (extraLine) {
+      append(extraLine);
+      await sleep(800);
+    }
+    append(`Applying: ${rec.action}`);
+    await sleep(600);
+    acceptRecommendation(mutate, model, rec);
+    const executed = useSim.getState().state.recommendations[rec.id] ?? rec;
+    append(executed.impact);
+    setOutcome(`${executed.action} — ${executed.impact}`);
+    setStep("resolved");
+  }
 
   useEffect(() => {
     if (step !== "brief" || !scn) return;
     const deadline = Date.now() + BRIEF_SECONDS * 1000;
-    timerRef.current = setInterval(() => {
+    briefTimerRef.current = setInterval(() => {
       const left = (deadline - Date.now()) / 1000;
       if (left <= 0) {
         setRemaining(0);
-        run(scn);
+        void run(scn);
         return;
       }
       setRemaining(left);
     }, 100);
     return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
+      if (briefTimerRef.current) clearInterval(briefTimerRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step, scn]);
@@ -213,21 +400,48 @@ export function AutomationScenariosPanel() {
           </div>
         )}
 
-        {step === "running" && scn && (
-          <div className="flex flex-col items-center justify-center gap-3 py-10">
-            <Zap size={22} className="animate-pulse text-warm" />
-            <p className="text-[13px] text-mid">Detecting → deciding → executing…</p>
+        {step === "run" && scn && (
+          <div className="flex flex-col gap-3">
+            <div className="flex items-center gap-2">
+              <Zap size={14} className="animate-pulse text-warm" />
+              <span className="text-[13px] font-medium text-hi">{scn.title}</span>
+            </div>
+            <ul className="scrollbar-thin flex max-h-[280px] flex-col gap-1.5 overflow-y-auto rounded-lg border border-stroke bg-void/40 p-3">
+              {log.map((line, i) => (
+                <li key={i} className="mono flex gap-2 text-[11.5px] leading-snug text-mid">
+                  <span className="text-low">{String(i + 1).padStart(2, "0")}</span>
+                  <span>{line}</span>
+                </li>
+              ))}
+              {!log.length && <li className="text-[11.5px] text-low">Starting…</li>}
+            </ul>
+            {progress && (
+              <div className="flex flex-col gap-1">
+                <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/10">
+                  <div className="h-full rounded-full bg-warm transition-[width]" style={{ width: `${progress.pct}%` }} />
+                </div>
+                <span className="mono text-[10.5px] text-warm">{progress.label}</span>
+              </div>
+            )}
           </div>
         )}
 
         {step === "resolved" && scn && (
-          <div className="flex flex-col gap-3 py-4">
+          <div className="flex flex-col gap-3">
             <div className="flex items-center gap-2">
               <Tag color="#34d399">RESOLVED</Tag>
               <span className="text-[14px] font-medium text-hi">{scn.title}</span>
             </div>
+            <ul className="scrollbar-thin flex max-h-[220px] flex-col gap-1.5 overflow-y-auto rounded-lg border border-stroke bg-void/40 p-3">
+              {log.map((line, i) => (
+                <li key={i} className="mono flex gap-2 text-[11px] leading-snug text-low">
+                  <span>{String(i + 1).padStart(2, "0")}</span>
+                  <span>{line}</span>
+                </li>
+              ))}
+            </ul>
             <p className="text-[12.5px] leading-snug text-positive">{outcome}</p>
-            <div className="mt-2 flex gap-2">
+            <div className="mt-1 flex gap-2">
               <Button size="sm" variant="outline" onClick={() => setStep("list")}>
                 Run another scenario
               </Button>
@@ -239,9 +453,17 @@ export function AutomationScenariosPanel() {
         )}
 
         {step === "miss" && scn && (
-          <div className="flex flex-col gap-3 py-6">
+          <div className="flex flex-col gap-3 py-2">
+            <ul className="scrollbar-thin flex max-h-[220px] flex-col gap-1.5 overflow-y-auto rounded-lg border border-stroke bg-void/40 p-3">
+              {log.map((line, i) => (
+                <li key={i} className="mono flex gap-2 text-[11px] leading-snug text-low">
+                  <span>{String(i + 1).padStart(2, "0")}</span>
+                  <span>{line}</span>
+                </li>
+              ))}
+            </ul>
             <p className="text-[12.5px] leading-snug text-warm">
-              No live situation matching &quot;{scn.title}&quot; right now — this module only recommends when its own real conditions are met, and re-evaluates every 30 simulated minutes. Try again in a moment, or run another scenario.
+              No live situation matching &quot;{scn.title}&quot; even after advancing the simulated clock — this module only recommends when its own real conditions are met. Try again in a moment, or run another scenario.
             </p>
             <div className={cn("flex gap-2")}>
               <Button size="sm" variant="outline" onClick={() => setStep("list")}>
@@ -253,4 +475,8 @@ export function AutomationScenariosPanel() {
       </div>
     </div>
   );
+}
+
+function clampPct(n: number) {
+  return Math.max(0, Math.min(100, Math.round(n)));
 }

@@ -1,8 +1,9 @@
 import type { ResortModel } from "@/lib/architecture/types";
 import type { ModuleId, Recommendation, SimState } from "@/lib/sim/types";
 import { injectScenario } from "@/lib/sim/actions";
-import { refreshRecommendations } from "@/lib/sim/engine";
+import { refreshRecommendations, tick } from "@/lib/sim/engine";
 import { statusFor } from "@/lib/intelligence/maintenance";
+import { nextBestActions } from "@/lib/intelligence/personalization";
 
 /** "Automation Scenarios" — a curated, explain-then-run catalog for demonstrating full
  * detect → decide → act loops, one module at a time, distinct from the generic Autopilot
@@ -67,6 +68,59 @@ export function triggerAssetFailure(state: SimState, model: ResortModel): string
   if (!asset) return null;
   injectScenario(state, model, asset.id);
   return asset.id;
+}
+
+/** Forces the exact precondition lib/intelligence/personalization.ts's own "upgrade" action
+ * reads — a stated sea-view preference plus a genuinely vacant-clean sea-view room to move
+ * them into (without a real match to offer, the module scores this action 0.2, well under its
+ * own 0.75 publish gate). Only nudges the one field the module actually checks (Guest.prefs);
+ * everything else about the guest — sentiment, loyalty, spend — is untouched. Because
+ * personalizationRecommendations() only ever publishes the resort-wide top 3 scored guests,
+ * making the action *eligible* isn't enough — this replicates that same guest-wide scan
+ * (read-only, using the real nextBestActions()) to confirm our nudged guest actually clears
+ * it before committing, trying a few different candidates rather than gambling on one. */
+export function triggerPersonalizationVip(state: SimState, model: ResortModel): string | null {
+  const hasVacantSeaView = model.rooms.some((r) => r.seaView && state.rooms[r.id]?.status === "vacant-clean");
+  if (!hasVacantSeaView) return null;
+  const pool = Object.values(state.guests).filter((g) => g.roomId && g.consentPersonalization && g.sentiment >= -0.15 && !model.roomById.get(g.roomId!)?.seaView && !g.prefs.includes("sea-view"));
+  for (let attempt = 0; attempt < Math.min(6, pool.length); attempt++) {
+    const g = pool[Math.floor(Math.random() * pool.length)];
+    const prevPrefs = g.prefs;
+    g.prefs = [...g.prefs, "sea-view"];
+    const top = nextBestActions(g, state, model)[0];
+    if (top?.id !== "upgrade") {
+      g.prefs = prevPrefs;
+      continue;
+    }
+    const scored = Object.values(state.guests)
+      .filter((x) => x.roomId)
+      .map((x) => ({ id: x.id, score: nextBestActions(x, state, model)[0]?.score ?? 0 }))
+      .filter((x) => x.score >= 0.75)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 3);
+    if (scored.some((x) => x.id === g.id)) {
+      refreshRecommendations(state, model);
+      return g.id;
+    }
+    g.prefs = prevPrefs;
+  }
+  return null;
+}
+
+export function isPhysicalScenario(kind: ScenarioKind): boolean {
+  return kind === "asset-failure" || kind === "guest-message" || kind === "guest-app-order";
+}
+
+/** Advances the REAL sim clock (the same tick() the global loop calls every frame) in visible
+ * steps and re-evaluates recommendations after each one — used when a "recommendation"-kind
+ * scenario has no live match at the instant it's picked. Not a fabricated wait: population-
+ * level modules (pricing, staffing, groupblock, weather, segmentation) genuinely only produce
+ * a fresh recommendation once enough simulated time has passed for their own conditions to
+ * shift, so this is the honest way to give one a chance to appear rather than pretending one
+ * already existed. */
+export function tickForwardStep(state: SimState, model: ResortModel, stepMin = 30) {
+  tick(state, model, stepMin);
+  refreshRecommendations(state, model);
 }
 
 export const SCENARIOS: ScenarioDef[] = [
