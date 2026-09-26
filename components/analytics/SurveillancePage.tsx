@@ -1,15 +1,18 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Car, Square, Gauge } from "lucide-react";
+import { Car, Square, Gauge, Siren, CheckCircle2 } from "lucide-react";
 import { useSim } from "@/store/sim";
+import { getModel } from "@/lib/architecture/model";
 import { addAlert } from "@/lib/sim/engine";
 import { loadCocoModel, type DetectedObject } from "@/lib/vision/coco";
 import { FireHeuristicDetector } from "@/lib/vision/fireHeuristic";
 import { AltercationHeuristicDetector } from "@/lib/vision/altercationHeuristic";
 import { scoreParkingGrid, GRID_COLS, GRID_ROWS, type ParkingZone } from "@/lib/vision/parkingGrid";
 import { CLIPS, CATEGORY_META, type DetectionCategory, type ClipMeta } from "@/lib/vision/manifest";
+import { dispatchEmergencyResponse, pickFireTarget, pickIncidentZone, type EmergencyDispatchResult, type IncidentKind } from "@/lib/vision/emergencyResponse";
 import { AnalyticsShell, Card } from "./AnalyticsShell";
+import { PropertyHeatmap } from "./PropertyHeatmap";
 import { Button, Tag } from "@/components/ui/primitives";
 import { cn } from "@/lib/utils";
 
@@ -32,6 +35,8 @@ export function SurveillancePage() {
   const [log, setLog] = useState<string[]>([]);
   const [parkingZones, setParkingZones] = useState<ParkingZone[] | null>(null);
   const [liveReadout, setLiveReadout] = useState("");
+  const [emergency, setEmergency] = useState<EmergencyDispatchResult | null>(null);
+  const [crowdIntensity, setCrowdIntensity] = useState(0);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -82,6 +87,49 @@ export function SurveillancePage() {
     }
   };
 
+  /** Tints each grid cell directly over the real footage (green = free, purple = occupied) so
+   * "which parking is empty" is answered by looking at the actual video, not just an abstract
+   * side panel — the side panel's grid mirrors the exact same zones for a second read, but the
+   * primary answer is drawn where the camera is actually looking. */
+  const drawParkingOverlay = (ctx: CanvasRenderingContext2D, video: HTMLVideoElement, zones: ParkingZone[], vehicleBoxes: { x: number; y: number; w: number; h: number; label: string; color: string }[]) => {
+    const sx = ctx.canvas.width / video.videoWidth;
+    const sy = ctx.canvas.height / video.videoHeight;
+    ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+    const cellW = (video.videoWidth / GRID_COLS) * sx;
+    const cellH = (video.videoHeight / GRID_ROWS) * sy;
+    for (const z of zones) {
+      ctx.fillStyle = z.occupied ? "rgba(192,132,252,0.22)" : "rgba(52,211,153,0.14)";
+      ctx.strokeStyle = z.occupied ? "rgba(192,132,252,0.65)" : "rgba(52,211,153,0.45)";
+      ctx.lineWidth = 1.5;
+      const x = z.col * cellW;
+      const y = z.row * cellH;
+      ctx.fillRect(x, y, cellW, cellH);
+      ctx.strokeRect(x, y, cellW, cellH);
+      ctx.font = "11px monospace";
+      ctx.fillStyle = z.occupied ? "#c084fc" : "#34d399";
+      ctx.fillText(z.occupied ? `occupied ×${z.vehicleCount}` : "empty", x + 6, y + 14);
+    }
+    for (const b of vehicleBoxes) {
+      ctx.strokeStyle = b.color;
+      ctx.lineWidth = 2;
+      ctx.strokeRect(b.x * sx, b.y * sy, b.w * sx, b.h * sy);
+      ctx.font = "11px monospace";
+      ctx.fillStyle = b.color;
+      ctx.fillText(b.label, b.x * sx + 2, Math.max(11, b.y * sy - 3));
+    }
+  };
+
+  const triggerEmergency = (kind: IncidentKind) => {
+    const model = getModel();
+    const target = kind === "fire" ? pickFireTarget(model) : pickIncidentZone(model);
+    if (!target) return;
+    let result: EmergencyDispatchResult | null = null;
+    useSim.getState().mutate((st) => {
+      result = dispatchEmergencyResponse(st, model, kind, target.id, target.label);
+    });
+    if (result) setEmergency(result);
+  };
+
   const run = async () => {
     const video = videoRef.current;
     const canvas = canvasRef.current;
@@ -92,6 +140,8 @@ export function SurveillancePage() {
     setParkingZones(null);
     parkingZonesRef.current = null;
     confirmedCountRef.current = 0;
+    setEmergency(null);
+    setCrowdIntensity(0);
     detectorsRef.current = { fire: new FireHeuristicDetector(), alt: new AltercationHeuristicDetector() };
 
     if (modelStatus !== "ready" && category !== "fire") {
@@ -127,12 +177,17 @@ export function SurveillancePage() {
 
         if (category === "fire") {
           const s = detectorsRef.current.fire!.sample(video);
-          drawBoxes(ctx, video, s.passed ? [{ x: 0, y: 0, w: video.videoWidth, h: video.videoHeight, label: "warm+flicker signature", color: "#f4436c" }] : []);
-          setLiveReadout(`warm-pixel ratio ${(s.ratio * 100).toFixed(1)}% · flicker ${s.flicker.toFixed(4)} · gate ${s.passed ? "ARMED" : "clear"}`);
+          drawBoxes(ctx, video, s.passed ? [{ x: 0, y: 0, w: video.videoWidth, h: video.videoHeight, label: "rise+flicker signature", color: "#f4436c" }] : []);
+          setLiveReadout(
+            s.calibrating
+              ? `calibrating this scene's own baseline… ratio ${(s.ratio * 100).toFixed(1)}%`
+              : `ratio ${(s.ratio * 100).toFixed(1)}% (baseline ${((s.baseline ?? 0) * 100).toFixed(1)}%) · flicker σ ${s.flicker.toFixed(2)} · gate ${s.passed ? "ARMED" : "clear"}`,
+          );
           if (s.justConfirmed) {
             confirmedCountRef.current++;
-            const line = `FIRE signature confirmed at ${video.currentTime.toFixed(1)}s — ${(s.ratio * 100).toFixed(1)}% warm-pixel coverage, flicker variance ${s.flicker.toFixed(4)}, sustained across 4 of last 6 samples`;
-            append(line);
+            append(
+              `FIRE signature confirmed at ${video.currentTime.toFixed(1)}s — ${(s.ratio * 100).toFixed(1)}% coverage vs this scene's own ${((s.baseline ?? 0) * 100).toFixed(1)}% baseline, flicker σ ${s.flicker.toFixed(2)}, sustained 4/6 samples`,
+            );
             useSim.getState().mutate((st) =>
               addAlert(st, {
                 severity: "critical",
@@ -140,9 +195,10 @@ export function SurveillancePage() {
                 targetKind: "zone",
                 targetId: "cctv-fire",
                 title: `Fire signature detected — ${clip.label}`,
-                body: `${(s.ratio * 100).toFixed(1)}% of frame warm-pixel coverage with flicker variance ${s.flicker.toFixed(4)}, sustained 4/6 samples at ${video.currentTime.toFixed(1)}s into the feed.`,
+                body: `${(s.ratio * 100).toFixed(1)}% warm/hot-pixel coverage vs this scene's own calibrated ${((s.baseline ?? 0) * 100).toFixed(1)}% baseline, flicker σ ${s.flicker.toFixed(2)}, sustained 4/6 samples at ${video.currentTime.toFixed(1)}s into the feed.`,
               }),
             );
+            triggerEmergency("fire");
           }
         } else if (category === "altercation" && model) {
           const detections = await model.detect(video, 30, 0.35);
@@ -163,6 +219,10 @@ export function SurveillancePage() {
           setLiveReadout(
             `people ${s.peopleCount} · max box-overlap ${(s.maxOverlapIoU * 100).toFixed(0)}% · motion ${s.avgMotion.toFixed(1)}px/sample · contact-gate ${s.passed ? "ARMED" : "clear"} · down-gate ${s.personDown ? "ARMED" : "clear"}`,
           );
+          // Drives the property heatmap's one live tile — normalized against the same
+          // MOTION_THRESHOLD_PX the detector itself gates on, so "hot" on the map means the
+          // same thing "armed" means in the readout above, not a separately-invented scale.
+          setCrowdIntensity(Math.max(0, Math.min(1, s.avgMotion / 40 + s.peopleCount * 0.15)));
           if (s.justConfirmed) {
             confirmedCountRef.current++;
             append(`ALTERCATION signature confirmed at ${video.currentTime.toFixed(1)}s — ${s.peopleCount} people, box-overlap ${(s.maxOverlapIoU * 100).toFixed(0)}%, motion ${s.avgMotion.toFixed(1)}px/sample, sustained 4/6 samples`);
@@ -176,6 +236,7 @@ export function SurveillancePage() {
                 body: `${s.peopleCount} people in sustained close contact (box-overlap ${(s.maxOverlapIoU * 100).toFixed(0)}%) with elevated motion (${s.avgMotion.toFixed(1)}px/sample), sustained 4/6 samples at ${video.currentTime.toFixed(1)}s into the feed.`,
               }),
             );
+            triggerEmergency("altercation");
           }
           if (s.justConfirmedDown) {
             confirmedCountRef.current++;
@@ -190,6 +251,7 @@ export function SurveillancePage() {
                 body: `A detected person's bounding-box width/height ratio has risen well above a standing posture's typical ~0.4-0.5 (a lower, wider box — crouched, seated or collapsed), sustained 4/6 samples at ${video.currentTime.toFixed(1)}s.`,
               }),
             );
+            triggerEmergency("person-down");
           }
         } else if (category === "parking" && model) {
           // COCO-SSD's default 0.5 confidence floor is tuned for street-level/frontal car
@@ -200,12 +262,13 @@ export function SurveillancePage() {
           // exist — the drawn score label is honest about how confident each box actually is.
           const detections: DetectedObject[] = await model.detect(video, 40, 0.15);
           const vehicles = detections.filter((d) => d.class === "car" || d.class === "truck" || d.class === "bus");
-          drawBoxes(
+          const zones = scoreParkingGrid(detections, video.videoWidth, video.videoHeight);
+          drawParkingOverlay(
             ctx,
             video,
-            vehicles.map((v) => ({ x: v.bbox[0], y: v.bbox[1], w: v.bbox[2], h: v.bbox[3], label: `${v.class} ${(v.score * 100).toFixed(0)}%`, color: "#c084fc" })),
+            zones,
+            vehicles.map((v) => ({ x: v.bbox[0], y: v.bbox[1], w: v.bbox[2], h: v.bbox[3], label: `${v.class} ${(v.score * 100).toFixed(0)}%`, color: "#e9d5ff" })),
           );
-          const zones = scoreParkingGrid(detections, video.videoWidth, video.videoHeight);
           parkingZonesRef.current = zones;
           setParkingZones(zones);
           const occ = zones.filter((z) => z.occupied).length;
@@ -242,6 +305,7 @@ export function SurveillancePage() {
               setLog([]);
               setParkingZones(null);
               setLiveReadout("");
+              setEmergency(null);
             }}
             className={cn("flex flex-col gap-1 rounded-lg border p-3 text-left", category === c ? "border-stroke-lit bg-white/[0.05]" : "border-stroke bg-white/[0.02] hover:bg-white/[0.03]")}
           >
@@ -262,6 +326,7 @@ export function SurveillancePage() {
                 setLog([]);
                 setParkingZones(null);
                 setLiveReadout("");
+                setEmergency(null);
               }}
               className={cn("rounded-md border px-2.5 py-1 text-[11.5px]", clip.id === c.id ? "border-accent/60 bg-accent/10 text-accent" : "border-stroke text-mid hover:text-hi")}
             >
@@ -296,6 +361,27 @@ export function SurveillancePage() {
         </div>
       </Card>
 
+      {emergency && (
+        <Card title="Automated emergency response" right={<Tag color="#f4436c">LIVE</Tag>}>
+          <div className="mb-2 flex items-center gap-2 text-[12.5px] text-hi">
+            <Siren size={15} className="animate-pulse text-critical" />
+            <span>
+              Target: <span className="text-critical">{emergency.targetLabel}</span>
+            </span>
+          </div>
+          <div className="grid grid-cols-4 gap-2">
+            {emergency.steps.map((step, i) => (
+              <div key={step.label} className="animate-in fade-in rounded-lg border border-stroke bg-white/[0.02] p-2" style={{ animationDelay: `${i * 150}ms` }}>
+                <div className="flex items-center gap-1.5 text-[11.5px] font-medium text-hi">
+                  <CheckCircle2 size={12} className="text-positive" /> {step.label}
+                </div>
+                <p className="mt-1 text-[10.5px] leading-snug text-low">{step.detail}</p>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
       <div className="grid grid-cols-3 gap-4">
         <Card className="col-span-2" title={clip.label}>
           <div className="relative w-full overflow-hidden rounded-lg bg-black">
@@ -311,6 +397,14 @@ export function SurveillancePage() {
         </Card>
 
         <div className="flex flex-col gap-3">
+          {category === "altercation" && (
+            <Card title="Property crowd/traffic map" right={<span className="text-[10px] text-low">1 live camera feed</span>}>
+              <p className="mb-2 text-[11px] leading-snug text-mid">
+                Same zone layout the 3D digital twin renders from. Only the zone below has a real camera feed today (this project&apos;s one supplied crowd-motion clip) — its heat is driven by the detector&apos;s own measured people-count and motion; every other zone is honestly shown idle, not fabricated.
+              </p>
+              <PropertyHeatmap liveZoneId="z-lobby" liveIntensity={crowdIntensity} liveLabel={`${Math.round(crowdIntensity * 100)}% traffic`} />
+            </Card>
+          )}
           {category === "parking" && (
             <Card title="Lot occupancy">
               <div className="mb-3 grid grid-cols-3 gap-2">
