@@ -126,6 +126,10 @@ components/analytics  deep-dive routes
 
 **Quality tiers** (`store/quality.ts`) auto-degrade on low FPS: DPR, shadows, post-processing, glass transmission and palm density.
 
+### What-if simulator
+
+`Planning → What if…` in the left rail opens a projection panel: drag a hypothetical occupancy and watch recommended RevPAR/ADR, unmet staffing shifts, and inventory reorder counts move — computed by re-running the exact same production functions the Revenue/Operations/Inventory pages use (`computePricing`, `solveRoster`, `assessInventory`) against a cloned state with only `kpis.occupancy` overridden, never the real one (`lib/intelligence/whatIf.ts`). Not a separate toy model and not applied to the live sim — a GM's forecast before a decision, not the decision itself.
+
 ## Keyboard
 
 `1–7` view modes · `U Q W E R Y` layers (risk · occupancy · maintenance · sentiment · revenue · energy) · `Shift+T` housekeeping layer · `[ ]` floors · `Space` pause · `⌘K` search · `T` tour · `?` help

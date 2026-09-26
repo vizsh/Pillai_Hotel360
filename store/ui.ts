@@ -8,11 +8,13 @@ interface UiStore {
   twinReady: boolean;
   paletteOpen: boolean;
   helpOpen: boolean;
+  whatIfOpen: boolean;
   mobilePanel: MobilePanel;
   methodologyModule: ModuleId | null;
   setTwinReady: (v: boolean) => void;
   setPalette: (v: boolean) => void;
   setHelp: (v: boolean) => void;
+  setWhatIf: (v: boolean) => void;
   setMobilePanel: (p: MobilePanel) => void;
   openMethodology: (m: ModuleId) => void;
   closeMethodology: () => void;
@@ -23,11 +25,13 @@ export const useUi = create<UiStore>()(
     twinReady: false,
     paletteOpen: false,
     helpOpen: false,
+    whatIfOpen: false,
     mobilePanel: "none",
     methodologyModule: null,
     setTwinReady: (twinReady) => set({ twinReady }),
     setPalette: (paletteOpen) => set({ paletteOpen }),
     setHelp: (helpOpen) => set({ helpOpen }),
+    setWhatIf: (whatIfOpen) => set({ whatIfOpen }),
     setMobilePanel: (mobilePanel) => set((s) => ({ mobilePanel: s.mobilePanel === mobilePanel ? "none" : mobilePanel })),
     openMethodology: (methodologyModule) => set({ methodologyModule }),
     closeMethodology: () => set({ methodologyModule: null }),

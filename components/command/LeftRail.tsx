@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { Orbit, Layers3, Rows3, ScanLine, Map, Building2, TreePalm, Users, Bell, Tag as TagIcon, Route, Play, Square, ArrowUpRight, Zap } from "lucide-react";
+import { Orbit, Layers3, Rows3, ScanLine, Map, Building2, TreePalm, Users, Bell, Tag as TagIcon, Route, Play, Square, ArrowUpRight, Zap, Sparkles } from "lucide-react";
 import { routes } from "@/components/analytics/AnalyticsShell";
 import { useTwin, layerMeta, type LayerId, type ViewMode } from "@/store/twin";
+import { useUi } from "@/store/ui";
 import { useDirector } from "@/store/director";
 import { getModel } from "@/lib/architecture/model";
 import { statusColors, statusLabels } from "@/lib/twin/colors";
@@ -154,6 +155,18 @@ export function LeftRail() {
             </span>
           </button>
         ))}
+      </div>
+
+      <div className="glass flex flex-col gap-1.5 p-2">
+        <span className="label px-1 pb-1">Planning</span>
+        <button
+          onClick={() => useUi.getState().setWhatIf(!useUi.getState().whatIfOpen)}
+          className="flex h-8 items-center gap-2.5 rounded-md border border-[#f5a524]/40 px-2 text-[12.5px] text-mid transition-colors hover:bg-[#f5a524]/10 hover:text-hi"
+        >
+          <Sparkles size={13} className="text-[#f5a524]" />
+          <span className="flex-1 text-left">What if…</span>
+        </button>
+        <p className="px-1 text-[10.5px] leading-snug text-low">Project a hypothetical occupancy through the real pricing, staffing and inventory engines — nothing here changes the live sim.</p>
       </div>
 
       <ScenarioPanel />

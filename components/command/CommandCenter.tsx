@@ -15,6 +15,7 @@ import { BottomDock } from "./BottomDock";
 import { ConciergeDock } from "./ConciergeDock";
 import { DollhouseHud } from "./DollhouseHud";
 import { AskCaption } from "./AskCaption";
+import { WhatIfPanel } from "./WhatIfPanel";
 import { LoadingOverlay, Palette, HelpSheet } from "./Overlays";
 import { DirectorCaptions } from "./DirectorCaptions";
 import { MethodologyPanel } from "./MethodologyPanel";
@@ -29,6 +30,8 @@ const keyLayers: Record<string, LayerId> = { u: "risk", q: "occupancy", w: "main
 export function CommandCenter() {
   useSimLoop();
   useTelegramInbox();
+  const whatIfOpen = useUi((s) => s.whatIfOpen);
+  const setWhatIf = useUi((s) => s.setWhatIf);
   const hydrate = useSession((s) => s.hydrate);
   useEffect(() => {
     void hydrate();
@@ -54,6 +57,8 @@ export function CommandCenter() {
         if (ui.paletteOpen || ui.helpOpen) {
           ui.setPalette(false);
           ui.setHelp(false);
+        } else if (ui.whatIfOpen) {
+          ui.setWhatIf(false);
         } else if (t.viewMode === "room") {
           t.setViewMode("isolate");
           t.select(null);
@@ -114,6 +119,7 @@ export function CommandCenter() {
         <DirectorCaptions />
         <DollhouseHud />
         <AskCaption />
+        {whatIfOpen && <WhatIfPanel onClose={() => setWhatIf(false)} />}
         <MethodologyPanel />
         <Onboarding />
       </div>
