@@ -10,6 +10,7 @@ import { useSimLoop } from "@/hooks/useSimLoop";
 import { useTelegramInbox } from "@/hooks/useTelegramInbox";
 import { useGuestAppInbox } from "@/hooks/useGuestAppInbox";
 import { useLiveWeather } from "@/hooks/useLiveWeather";
+import { useSocialWeatherSignals } from "@/hooks/useSocialWeatherSignals";
 import { TopBar } from "./TopBar";
 import { LeftRail } from "./LeftRail";
 import { ContextPanel } from "./ContextPanel";
@@ -35,6 +36,7 @@ export function CommandCenter() {
   useTelegramInbox();
   useGuestAppInbox();
   useLiveWeather();
+  useSocialWeatherSignals();
   const whatIfOpen = useUi((s) => s.whatIfOpen);
   const setWhatIf = useUi((s) => s.setWhatIf);
   const hydrate = useSession((s) => s.hydrate);

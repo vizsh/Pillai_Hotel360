@@ -28,19 +28,19 @@ export const ROLES: Record<Role, RoleDef> = {
   "revenue-manager": {
     label: "Revenue Manager",
     description: "Pricing, demand and guest value — not HR rosters or engineering telemetry.",
-    routes: ["/revenue", "/guests", "/operations", "/history", "/summary"],
+    routes: ["/revenue", "/guests", "/operations", "/weather-twin", "/history", "/summary"],
     canViewGuestValue: true,
   },
   "front-office-manager": {
     label: "Front Office Manager",
     description: "Guests, arrivals and service — no room-rate or guest-spend detail.",
-    routes: ["/guests", "/operations", "/sentiment", "/concierge", "/summary"],
+    routes: ["/guests", "/operations", "/weather-twin", "/sentiment", "/concierge", "/summary"],
     canViewGuestValue: false,
   },
   "executive-housekeeper": {
     label: "Executive Housekeeper",
     description: "Rooms, roster and maintenance only — never guest spend, per the PS's own named example.",
-    routes: ["/operations", "/maintenance", "/inventory", "/energy"],
+    routes: ["/operations", "/maintenance", "/inventory", "/energy", "/weather-twin"],
     canViewGuestValue: false,
   },
 };

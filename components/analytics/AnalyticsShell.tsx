@@ -10,6 +10,7 @@ import { useSimLoop } from "@/hooks/useSimLoop";
 import { useTelegramInbox } from "@/hooks/useTelegramInbox";
 import { useGuestAppInbox } from "@/hooks/useGuestAppInbox";
 import { useLiveWeather } from "@/hooks/useLiveWeather";
+import { useSocialWeatherSignals } from "@/hooks/useSocialWeatherSignals";
 import { fmtClock } from "@/lib/sim/engine";
 import { Button, Provenance } from "@/components/ui/primitives";
 import { MethodologyPanel } from "@/components/command/MethodologyPanel";
@@ -23,6 +24,7 @@ export const routes = [
   { href: "/maintenance", label: "Maintenance" },
   { href: "/inventory", label: "Inventory" },
   { href: "/energy", label: "Energy" },
+  { href: "/weather-twin", label: "Weather Twin" },
   { href: "/sentiment", label: "Sentiment" },
   { href: "/surveillance", label: "Surveillance" },
   { href: "/concierge", label: "Concierge" },
@@ -37,6 +39,7 @@ export function AnalyticsShell({ title, subtitle, children }: { title: string; s
   useTelegramInbox();
   useGuestAppInbox();
   useLiveWeather();
+  useSocialWeatherSignals();
   const path = usePathname();
   const router = useRouter();
   const { state, setPaused, setSpeed } = useSim();

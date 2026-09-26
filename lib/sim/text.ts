@@ -50,9 +50,15 @@ export const requestWeights: Record<RequestType, number> = {
   complaint: 0.08,
 };
 
-export function pickRequestType(r: Rand, maintBias = 0): RequestType {
+/** bias keys are added (or subtracted, if negative) directly to that category's base weight
+ * before normalizing — e.g. {maintenance: 0.2} for the equipment-crisis scenario,
+ * {fnb: 0.1, concierge: -0.05} for a rainy day (lib/intelligence/weatherImpact.ts). Clamped to
+ * 0 so a large negative bias thins a category out instead of ever making it un-pickable via a
+ * negative weight. */
+export function pickRequestType(r: Rand, bias: Partial<Record<RequestType, number>> = {}): RequestType {
   let x = r();
-  const w = { ...requestWeights, maintenance: requestWeights.maintenance + maintBias };
+  const w = { ...requestWeights };
+  for (const k of Object.keys(bias) as RequestType[]) w[k] = Math.max(0, w[k] + (bias[k] ?? 0));
   const total = Object.values(w).reduce((a, b) => a + b, 0);
   for (const [k, v] of Object.entries(w)) {
     x -= v / total;

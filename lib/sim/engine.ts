@@ -10,7 +10,9 @@ import { assessAsset, maintenanceRecommendations, statusFor } from "@/lib/intell
 import { scoreText, sentimentRecommendations } from "@/lib/intelligence/sentiment";
 import { runModules } from "@/lib/intelligence/registry";
 import { FATIGUE_BASE_ACCRUAL, FATIGUE_OVERLOAD_ACCRUAL, FATIGUE_RECOVERY_RATE, STANDARD_ROOMS_PER_HK_SHIFT } from "@/lib/intelligence/staffing";
-import { weatherForDay } from "@/lib/intelligence/weather";
+import { forecastWeather, type WeatherDay } from "@/lib/intelligence/weather";
+import { weatherDemandProfile } from "@/lib/intelligence/weatherImpact";
+import { publicConcernScore } from "@/lib/intelligence/socialSignals";
 
 let counter = 1;
 let rand: Rand = mulberry32(1);
@@ -221,7 +223,11 @@ export function refreshRecommendations(state: SimState, model: ResortModel) {
   }
 }
 
-export function tick(state: SimState, model: ResortModel, dtMin: number) {
+/** weatherOverride lets the weather what-if projection (lib/intelligence/weatherWhatIf.ts) force
+ * a specific day's weather while fast-forwarding a cloned state, instead of reading whatever the
+ * real forecast/seed would produce — every other caller omits it and gets the normal live-else-
+ * seeded forecast exactly as before. */
+export function tick(state: SimState, model: ResortModel, dtMin: number, weatherOverride?: WeatherDay) {
   ensureRand(state);
   const prevClock = clock(state.t);
   state.t += dtMin;
@@ -229,6 +235,14 @@ export function tick(state: SimState, model: ResortModel, dtMin: number) {
   const rooms = Object.values(state.rooms);
   const totalRooms = rooms.length;
   const dtH = dtMin / 60;
+  // Computed once per tick and read everywhere below (organic demand, asset wear, presence) so
+  // the live sim, the forecast card, and the weather what-if projection can never disagree about
+  // "today's weather" — reads real live data when fresh (see forecastWeather's own fallback),
+  // seeded data otherwise. This is the fix for the gap the live weather integration had: before,
+  // only the forecast *card* used forecastWeather(); the tick itself read the seeded-only
+  // weatherForDay() directly and could never actually be moved by real weather.
+  const todayWeather = weatherOverride ?? forecastWeather(state)[0];
+  const weatherProfile = weatherDemandProfile(todayWeather);
 
   if (prevClock.h !== now.h) {
     const shift = shiftFor(now.h);
@@ -288,10 +302,18 @@ export function tick(state: SimState, model: ResortModel, dtMin: number) {
   }
 
   const maintBias = state.scenario === "equipment-crisis" ? 0.2 : 0;
+  // Real-World Social Signal Integration's second-order link into the twin: live public
+  // chatter actually about flood/storm/cancellation trouble right now (not just today's
+  // weather condition, which is already in weatherProfile) sharpens the same front-desk-
+  // leaning shift a bit further — small on purpose (0.06 max), since this is a coarse keyword
+  // hit-rate, not a calibrated model, and shouldn't be allowed to dominate the weather-driven
+  // effect it's layered on top of.
+  const concern = publicConcernScore();
+  const requestBias = { maintenance: maintBias, ...weatherProfile.requestBias, concierge: (weatherProfile.requestBias.concierge ?? 0) - 0.06 * concern, complaint: 0.04 * concern };
   for (const r of rooms) {
     if (!r.guestId) continue;
     if (rand() < 0.05 * dtH * (now.hour > 7 && now.hour < 23 ? 1 : 0.15)) {
-      const type = pickRequestType(rand, maintBias);
+      const type = pickRequestType(rand, requestBias);
       const tpl = pick(rand, requestTemplates[type]);
       const req = createRequest(state, model, r.id, type, tpl.text, "guest", tpl.sla, r.guestId);
       pushFeed(state, "request", `${model.roomById.get(r.id)!.number}: ${tpl.text}`, "room", r.id);
@@ -381,9 +403,8 @@ export function tick(state: SimState, model: ResortModel, dtMin: number) {
 
   const crisis = state.scenario === "equipment-crisis" ? 2.2 : 1;
   // Heat-linked AC failure risk (a named PS edge case): a heatwave day runs AHU/chiller wear
-  // ~60% hotter — reads the same deterministic weather lib/intelligence/weather.ts's forecast
-  // does, so "today's weather" never disagrees between the live sim and the forecast card.
-  const todayWeather = weatherForDay(state.seed, Math.floor(state.t / DAY), state.scenario);
+  // ~60% hotter — todayWeather (computed once, at the top of tick()) is now live-data-aware,
+  // so this reacts to a real forecast heatwave, not only a seeded one.
   for (const a of model.assets) {
     const st = state.assets[a.id];
     if (st.status === "service") continue;
@@ -433,7 +454,11 @@ export function tick(state: SimState, model: ResortModel, dtMin: number) {
     // housekeeping is actually in the room. Moves slowly (EMA-style) so it reads as a
     // sustained absence rather than tick noise, which is what makes it useful as a signal
     // distinct from the instantaneous PMS occupancy flag.
-    const targetPresence = r.guestId ? (now.h >= 22 || now.h < 8 ? 0.9 : now.h >= 10 && now.h < 18 ? 0.35 : 0.65) : r.status === "cleaning" ? 0.5 : 0.03;
+    // Rain/heatwave daytimePresenceBump (lib/intelligence/weatherImpact.ts) raises how much a
+    // guest sits in-room through the day instead of at the pool/outdoors — the actual cascade
+    // path into energy: a present room can't drop into eco-mode (see the ecoMode check just
+    // below), so bad weather days genuinely draw more power, not just "look" that way.
+    const targetPresence = r.guestId ? (now.h >= 22 || now.h < 8 ? 0.9 : now.h >= 10 && now.h < 18 ? clamp(0.35 + weatherProfile.daytimePresenceBump, 0, 0.95) : 0.65) : r.status === "cleaning" ? 0.5 : 0.03;
     r.presence = clamp(r.presence + (targetPresence - r.presence) * clamp(0.25 * dtH, 0, 1) + randRange(rand, -0.03, 0.03) * Math.sqrt(dtH), 0, 1);
     if (r.ecoMode && r.presence > 0.6) r.ecoMode = false;
 
@@ -455,7 +480,7 @@ export function tick(state: SimState, model: ResortModel, dtMin: number) {
     const floor = model.roomById.get(g.roomId)!.floor;
     for (const a of model.assets) if (a.servesFloors.includes(floor) && state.assets[a.id].status === "failed") drift -= (a.kind === "ahu" || a.kind === "chiller" ? 0.07 : 0.03) * dtH;
     g.sentiment = clamp(g.sentiment + drift, -1, 1);
-    const fnbTick = randRange(rand, 0, 1) < 0.5 ? 0 : randRange(rand, 40, 260) * dtH;
+    const fnbTick = (randRange(rand, 0, 1) < 0.5 ? 0 : randRange(rand, 40, 260) * dtH) * weatherProfile.fnbSpendMultiplier;
     g.spendFnb += fnbTick;
     state.kpis.organicAncillaryToday += fnbTick;
     state.rooms[g.roomId].sentiment = g.sentiment;
