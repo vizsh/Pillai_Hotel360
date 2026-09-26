@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { Box, Lock, Pause, Play } from "lucide-react";
+import { usePathname, useRouter } from "next/navigation";
+import { Box, Lock, LogOut, Pause, Play, ShieldCheck } from "lucide-react";
 import { useSim } from "@/store/sim";
 import { useSession } from "@/store/session";
 import { useSimLoop } from "@/hooks/useSimLoop";
@@ -11,7 +11,7 @@ import { useTelegramInbox } from "@/hooks/useTelegramInbox";
 import { fmtClock } from "@/lib/sim/engine";
 import { Button, Provenance } from "@/components/ui/primitives";
 import { MethodologyPanel } from "@/components/command/MethodologyPanel";
-import { allowedRoutes, isRouteAllowed, ROLES, roleList } from "@/lib/rbac";
+import { allowedRoutes, isRouteAllowed, ROLES } from "@/lib/rbac";
 import { cn } from "@/lib/utils";
 
 export const routes = [
@@ -33,10 +33,10 @@ export function AnalyticsShell({ title, subtitle, children }: { title: string; s
   useSimLoop();
   useTelegramInbox();
   const path = usePathname();
+  const router = useRouter();
   const { state, setPaused, setSpeed } = useSim();
   useSim((s) => s.version);
-  const { role, setRole } = useSession();
-  const [roleMenuOpen, setRoleMenuOpen] = useState(false);
+  const { role, user, hydrate, logout } = useSession();
   const visibleRoutes = allowedRoutes(role, routes);
   const allowed = isRouteAllowed(role, path);
   const [mounted, setMounted] = useState(false);
@@ -47,6 +47,9 @@ export function AnalyticsShell({ title, subtitle, children }: { title: string; s
   // children, is the standard fix — see the same pattern's rationale in the project docs.
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => setMounted(true), []);
+  useEffect(() => {
+    void hydrate();
+  }, [hydrate]);
   return (
     <div className="relative flex h-full flex-col overflow-hidden bg-void">
       <header className="flex h-12 shrink-0 items-center gap-3 border-b border-stroke px-4">
@@ -63,29 +66,19 @@ export function AnalyticsShell({ title, subtitle, children }: { title: string; s
           ))}
         </nav>
         <div className="ml-auto flex items-center gap-2">
-          <div className="relative">
-            <button onClick={() => setRoleMenuOpen((v) => !v)} className="flex items-center gap-1.5 rounded-md border border-stroke bg-white/[0.02] px-2.5 py-1.5 text-[11.5px] text-mid hover:text-hi">
-              <Lock size={11} />
-              {ROLES[role].label}
-            </button>
-            {roleMenuOpen && (
-              <div className="absolute right-0 top-full z-20 mt-1 w-72 rounded-lg border border-stroke bg-deep p-1.5 shadow-xl">
-                {roleList.map((r) => (
-                  <button
-                    key={r}
-                    onClick={() => {
-                      setRole(r);
-                      setRoleMenuOpen(false);
-                    }}
-                    className={cn("flex w-full flex-col items-start gap-0.5 rounded-md px-2.5 py-2 text-left hover:bg-white/5", role === r && "bg-accent/10")}
-                  >
-                    <span className={cn("text-[12px]", role === r ? "text-accent" : "text-hi")}>{ROLES[r].label}</span>
-                    <span className="text-[10.5px] text-low">{ROLES[r].description}</span>
-                  </button>
-                ))}
-              </div>
-            )}
+          <div className="flex items-center gap-1.5 rounded-md border border-stroke bg-white/[0.02] px-2.5 py-1.5 text-[11.5px] text-mid" title={ROLES[role].description}>
+            <ShieldCheck size={11} className="text-accent" />
+            {user ? `${user.name} · ${ROLES[role].label}` : ROLES[role].label}
           </div>
+          <button
+            onClick={() => {
+              void logout().then(() => router.push("/login"));
+            }}
+            className="flex items-center gap-1 rounded-md border border-stroke bg-white/[0.02] px-2.5 py-1.5 text-[11.5px] text-mid hover:text-hi"
+            title="Sign out"
+          >
+            <LogOut size={11} />
+          </button>
           <Provenance />
           <Button size="icon" variant="subtle" onClick={() => setPaused(!state.paused)}>
             {state.paused ? <Play size={13} /> : <Pause size={13} />}

@@ -1,6 +1,20 @@
 import { DatabaseSync } from "node:sqlite";
 import path from "node:path";
 import fs from "node:fs";
+import { hashPassword } from "@/lib/auth/password";
+
+/** Fixed demo roster — one account per RBAC role (lib/rbac.ts), seeded once on first run.
+ * Not a signup system: there's no registration flow, and these are the only accounts that
+ * will ever exist, by design (see README's Auth section for exactly what that means and
+ * doesn't mean). Passwords are simple on purpose — this gates a hackathon demo, not a
+ * production property's PMS — but they're still real, salted, hashed and verified, not a
+ * hardcoded "if password === 'admin'" shortcut. */
+const DEMO_USERS = [
+  { username: "gm", name: "Ananya Reddy", role: "gm", password: "resort360" },
+  { username: "revenue", name: "Kabir Shah", role: "revenue-manager", password: "resort360" },
+  { username: "frontoffice", name: "Meera Iyer", role: "front-office-manager", password: "resort360" },
+  { username: "housekeeping", name: "Ganesh Rao", role: "executive-housekeeper", password: "resort360" },
+] as const;
 
 /** Server-only. A real SQLite database (Node's built-in node:sqlite — experimental as of
  * Node 22, but a genuine embedded SQL database, not a mock) backing periodic full-state
@@ -54,7 +68,21 @@ function init(): DatabaseSync {
       processed_at TEXT
     );
     CREATE INDEX IF NOT EXISTS idx_telegram_inbox_unprocessed ON telegram_inbox (processed_at);
+    CREATE TABLE IF NOT EXISTS users (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      username TEXT NOT NULL UNIQUE,
+      name TEXT NOT NULL,
+      role TEXT NOT NULL,
+      password_hash TEXT NOT NULL
+    );
   `);
+
+  const userCount = db.prepare("SELECT COUNT(*) as n FROM users").get() as { n: number };
+  if (userCount.n === 0) {
+    const insert = db.prepare("INSERT INTO users (username, name, role, password_hash) VALUES (?, ?, ?, ?)");
+    for (const u of DEMO_USERS) insert.run(u.username, u.name, u.role, hashPassword(u.password));
+  }
+
   return db;
 }
 

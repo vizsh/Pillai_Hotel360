@@ -11,9 +11,36 @@ npm install
 npm run dev
 ```
 
+Every route requires signing in first (see **Auth** below) — you'll land on `/login`.
+
 - `/command` — the command center (3D twin + panels + recommendation queue + concierge)
 - `/revenue` `/guests` `/operations` `/maintenance` `/inventory` `/sentiment` `/concierge` `/energy` `/assistant` — analytics deep dives
 - `npx tsx scripts/smoke.ts` — headless 3-day simulation run, prints KPIs
+
+### Auth
+
+A real login gate, not just a client-side role dropdown: `/login` has a typed username/password
+form plus one-click "continue as \<role\>" demo cards, backed by a fixed 4-account roster (one
+per RBAC role, `lib/db/client.ts`) with genuinely salted-and-hashed passwords
+(`lib/auth/password.ts`, Node's built-in `scrypt` — no bcrypt dependency needed) and a signed,
+httpOnly session cookie (`lib/auth/session.ts`, HMAC-SHA256, 8h expiry). `middleware.ts` redirects
+any unauthenticated request for a page route to `/login`; `store/session.ts` hydrates the
+logged-in user's *server-verified* role from `/api/auth/session` on load — the free role-switcher
+dropdown this project used to have is gone, because a role is now something you log in as, not
+something you self-select from a menu.
+
+**What this does and doesn't guarantee.** This is deliberately not a full auth framework
+(NextAuth/Auth.js etc.) — the app's pages are almost entirely client components reading a
+browser-only live simulation, so there's no per-request server render to hang a session provider
+off, and the actual demo need is narrower: real hashed passwords, a real signed session, and a
+real redirect gate, which is what's built. It gates *which pages a browser can load* and *which
+role you're assigned*, enforced server-side in `middleware.ts`. It does not, and structurally
+cannot, make the live simulation's own data confidential from the browser holding it — the
+entire sim state already lives in that browser's own JavaScript memory by design (see "What is
+real and what is simulated" below), so a curious user with devtools open could always read their
+own client's state regardless of role. RBAC's masking (`lib/rbac.ts`) was never a data-secrecy
+boundary and still isn't; it's a "would a real distribution of duties show this to this role"
+guardrail, same as before, just now behind a real login instead of a self-selectable label.
 
 ### Optional: local AI concierge + ops assistant (Ollama)
 
