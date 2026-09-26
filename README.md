@@ -78,6 +78,13 @@ npm run bot    # terminal 2
 - `/mytasks` — list currently assigned tasks with a "✅ Done" button per task (SLA-breached tasks are flagged)
 - Any other free text — reported as a new issue if it contains a valid room number (e.g. `"305 tap is leaking"`), routed through the same keyword classifier (`lib/intelligence/concierge.ts`) a guest concierge message goes through
 
+### Room dive & "show me" queries
+
+Two ways to explore the twin beyond point-and-read:
+
+- **Double-click any room** on `/command` to dive the camera inside it (single-click still just selects, for fast browsing across many rooms without diving into each one) and open a compact floating HUD (`components/command/DollhouseHud.tsx`) — the room's own highest-risk asset with a live sensor sparkline, a one-line guest note that's genuinely masked (not just visually smaller) when the guest hasn't consented to personalization, the room's own recent history, and the same accept-style action buttons as the sidebar. `Esc` or "Step back" returns to the floor view.
+- **"Show me" queries** — `Ctrl/⌘K` or the Ops Assistant (`/assistant`) both accept questions like *"which rooms are at risk tonight"*, *"which guests seem unhappy"*, or *"any SLA breaches open"*. Both call the same deterministic matcher (`lib/twin/queries.ts`) — not the LLM — so the camera frames and pulse-highlights the matched rooms and the answer appears as a caption, with zero hallucination risk in what actually moves the camera (the same reasoning behind keeping task dispatch deterministic elsewhere in this project). Asking from `/assistant` updates the same shared twin state and links to "View framed on the twin" since the 3D view isn't on that page; asking from `/command` itself shows the result immediately, in place.
+
 **Known limitations:** text and button interactions only — voice-note transcription (the blueprint's Marathi voice-note example) isn't implemented, since this session's own measured Ollama latency (30-90s per call on modest hardware) made adding a third heavy model for STT impractical for a demo. WhatsApp is scoped out entirely for the verification reason above.
 
 ## What is real and what is simulated

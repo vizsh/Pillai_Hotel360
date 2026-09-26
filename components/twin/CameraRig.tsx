@@ -88,6 +88,32 @@ export function lookForSelection(sel: Selection, viewMode: ViewMode, isolatedFlo
   return null;
 }
 
+/** Frames every highlighted room in one shot for the "show me" feature (lib/twin/queries.ts)
+ * — a bounding box over each room's center, viewed from a consistent elevated 3/4 angle sized
+ * to the spread rather than a fixed distance, so "3 rooms on one floor" and "8 rooms across
+ * the tower" both end up readably framed instead of either too tight or lost in the distance. */
+function lookForHighlight(ids: string[]): Look | null {
+  const m = getModel();
+  if (ids.length === 0) return null;
+  const yOff = (f: number) => (useTwin.getState().viewMode === "exploded" ? f * EXPLODE_GAP : 0);
+  const pts = ids.map((id) => m.roomById.get(id)).filter((r): r is NonNullable<typeof r> => !!r);
+  if (pts.length === 0) return null;
+  let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity, minY = Infinity, maxY = -Infinity;
+  for (const r of pts) {
+    const y = r.center[1] + yOff(r.floor);
+    minX = Math.min(minX, r.center[0]);
+    maxX = Math.max(maxX, r.center[0]);
+    minZ = Math.min(minZ, r.center[2]);
+    maxZ = Math.max(maxZ, r.center[2]);
+    minY = Math.min(minY, y);
+    maxY = Math.max(maxY, y);
+  }
+  const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2, cz = (minZ + maxZ) / 2;
+  const spread = Math.max(12, Math.hypot(maxX - minX, maxZ - minZ, maxY - minY));
+  const dist = spread * 1.15 + 14;
+  return [cx + dist * 0.62, cy + dist * 0.55, cz - dist * 0.62, cx, cy, cz];
+}
+
 // Not a React hook despite reading from useSim — it's the imperative .getState() escape
 // hatch, called from a plain function (lookForSelection), not a component. Named
 // getTwinStaffPos rather than useTwinStaffPos on purpose: the "use" prefix previously here
@@ -148,6 +174,20 @@ export function CameraRig() {
         invalidate();
       },
       { equalityFn: (a, b) => a[0] === b[0] && a[1] === b[1] && a[2] === b[2] },
+    );
+    return unsub;
+  }, [invalidate]);
+
+  useEffect(() => {
+    const unsub = useTwin.subscribe(
+      (s) => s.highlighted,
+      (ids) => {
+        const c = ref.current;
+        if (!c || ids.length === 0) return;
+        const look = lookForHighlight(ids);
+        if (look) c.setLookAt(...look, true);
+        invalidate();
+      },
     );
     return unsub;
   }, [invalidate]);

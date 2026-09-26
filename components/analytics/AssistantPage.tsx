@@ -2,10 +2,13 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Mic, MicOff, Send, Sparkles, Volume2, VolumeX } from "lucide-react";
+import Link from "next/link";
 import { useSim } from "@/store/sim";
 import { useSession } from "@/store/session";
+import { useTwin } from "@/store/twin";
 import { getModel } from "@/lib/architecture/model";
 import { buildOpsSnapshot } from "@/lib/ai/opsSnapshot";
+import { resolveTwinQuery } from "@/lib/twin/queries";
 import { LANGUAGE_LABELS, LANGUAGE_SPEECH_TAG, type AssistantLanguage } from "@/lib/ai/opsAssistantPrompt";
 import { ROLES } from "@/lib/rbac";
 import { AnalyticsShell, Card } from "./AnalyticsShell";
@@ -21,6 +24,10 @@ interface AssistantMessage {
   content: string;
   toolsUsed?: string[];
   guardrailTripped?: boolean;
+  /** Set when this reply came from resolveTwinQuery (lib/twin/queries.ts) instead of the LLM
+   * — a "show me" question that already moved the camera and highlighted rooms on the twin's
+   * shared store, whether or not /command happens to be open in another tab right now. */
+  twinAction?: boolean;
 }
 
 const suggestions = ["Who is staying in room 204?", "What problems need attention right now?", "List our VIP guests", "How is the resort doing today?", "Which guests seem unhappy?", "Any SLA breaches open?"];
@@ -87,8 +94,20 @@ export function AssistantPage() {
     const history = messages.map((m) => ({ role: m.role, content: m.content }));
     setMessages((m) => [...m, userMsg]);
     setText("");
-    setThinking(true);
 
+    // "Show me" questions act on the twin instead of just replying with text — resolved
+    // deterministically (lib/twin/queries.ts), not by the LLM, for the same reason task
+    // dispatch is deterministic: a hallucinated room list driving the camera would be worse
+    // than useless. Matched instantly, no Ollama round-trip, and the exact same matcher the
+    // Ctrl+K palette uses (Overlays.tsx), so the two behave identically.
+    const twinMatch = resolveTwinQuery(trimmed, state, model);
+    if (twinMatch) {
+      useTwin.getState().ask(twinMatch.rooms, twinMatch.caption);
+      setMessages((m) => [...m, { id: `a-${++msgIdRef.current}`, role: "assistant", content: twinMatch.caption, twinAction: true }]);
+      return;
+    }
+
+    setThinking(true);
     const snapshot = buildOpsSnapshot(state, model, role);
 
     fetch("/api/ops-assistant", {
@@ -182,9 +201,19 @@ export function AssistantPage() {
           )}
           {messages.map((m) => (
             <div key={m.id} className={cn("flex flex-col", m.role === "user" ? "items-end" : "items-start")}>
-              <div className={cn("max-w-[90%] rounded-xl px-3 py-2 text-[12.5px]", m.role === "user" ? "rounded-br-sm bg-accent/20 text-hi" : "rounded-bl-sm border border-accent/30 bg-accent/[0.05] text-mid")}>
+              <div
+                className={cn(
+                  "max-w-[90%] rounded-xl px-3 py-2 text-[12.5px]",
+                  m.role === "user" ? "rounded-br-sm bg-accent/20 text-hi" : m.twinAction ? "rounded-bl-sm border border-[#c084fc]/40 bg-[#c084fc]/[0.06] text-hi" : "rounded-bl-sm border border-accent/30 bg-accent/[0.05] text-mid",
+                )}
+              >
                 {m.role === "assistant" ? <Markdown text={m.content} className="flex flex-col gap-1" /> : m.content}
               </div>
+              {m.twinAction && (
+                <Link href="/command" className="mono mt-0.5 flex items-center gap-1 text-[10px] text-[#c084fc] hover:underline">
+                  <Sparkles size={9} /> View framed on the twin →
+                </Link>
+              )}
               {m.toolsUsed && m.toolsUsed.length > 0 && (
                 <div className="mono mt-0.5 flex items-center gap-1 text-[10px] text-accent/80">
                   <Sparkles size={9} /> used: {m.toolsUsed.join(", ")}

@@ -30,6 +30,11 @@ interface TwinStore {
   showInventory: boolean;
   selected: Selection | null;
   hovered: Selection | null;
+  /** Room ids the "show me" feature (Ctrl+K or the ops assistant) is currently pointing the
+   * camera at and pulsing a marker over — orthogonal to `selected` (a single entity the
+   * sidebar shows detail for). Cleared by dismissing the caption or picking a new query. */
+  highlighted: string[];
+  askCaption: string | null;
   tourPlaying: boolean;
   setViewMode: (m: ViewMode) => void;
   setIsolatedFloor: (f: number | null) => void;
@@ -38,6 +43,8 @@ interface TwinStore {
   select: (s: Selection | null) => void;
   hover: (s: Selection | null) => void;
   setTour: (p: boolean) => void;
+  ask: (rooms: string[], caption: string) => void;
+  dismissAsk: () => void;
 }
 
 export const useTwin = create<TwinStore>()(
@@ -52,6 +59,8 @@ export const useTwin = create<TwinStore>()(
     showInventory: false,
     selected: null,
     hovered: null,
+    highlighted: [],
+    askCaption: null,
     tourPlaying: false,
     setViewMode: (viewMode) =>
       set((s) => ({
@@ -66,6 +75,8 @@ export const useTwin = create<TwinStore>()(
     select: (selected) => set({ selected }),
     hover: (hovered) => set({ hovered }),
     setTour: (tourPlaying) => set({ tourPlaying }),
+    ask: (highlighted, askCaption) => set({ highlighted, askCaption }),
+    dismissAsk: () => set({ highlighted: [], askCaption: null }),
   })),
 );
 

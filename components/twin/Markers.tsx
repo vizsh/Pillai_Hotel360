@@ -42,9 +42,16 @@ function targetPosition(a: Pick<Alert, "targetKind" | "targetId">, viewMode: str
 
 export function Markers() {
   const version = useSim((s) => s.version);
-  const { showAlerts, showLabels, viewMode, isolatedFloor, selected, hovered } = useTwin();
+  const { showAlerts, showLabels, viewMode, isolatedFloor, selected, hovered, highlighted } = useTwin();
   const cap = useProfile().labelsCap;
   const model = getModel();
+
+  const highlightMarks = useMemo(() => {
+    void version;
+    return highlighted
+      .map((id) => ({ id, pos: targetPosition({ targetKind: "room", targetId: id }, viewMode) }))
+      .filter((x): x is { id: string; pos: [number, number, number] } => !!x.pos);
+  }, [version, highlighted, viewMode]);
 
   const alerts = useMemo(() => {
     void version;
@@ -108,6 +115,14 @@ export function Markers() {
               </span>
             )}
           </button>
+        </Html>
+      ))}
+      {highlightMarks.map(({ id, pos }) => (
+        <Html key={`ask-${id}`} position={pos} center zIndexRange={[5, 0]} style={{ pointerEvents: "none" }}>
+          <span className="relative flex h-4 w-4 items-center justify-center">
+            <span className="absolute inline-flex h-full w-full rounded-full opacity-70" style={{ background: "#c084fc", animation: "pulse-ring 1.1s ease-out infinite" }} />
+            <span className="relative inline-flex h-2.5 w-2.5 rounded-full" style={{ background: "#c084fc", boxShadow: "0 0 12px #c084fc" }} />
+          </span>
         </Html>
       ))}
       {focusPos && focusLabel && (

@@ -12,6 +12,8 @@ import { LeftRail } from "./LeftRail";
 import { ContextPanel } from "./ContextPanel";
 import { BottomDock } from "./BottomDock";
 import { ConciergeDock } from "./ConciergeDock";
+import { DollhouseHud } from "./DollhouseHud";
+import { AskCaption } from "./AskCaption";
 import { LoadingOverlay, Palette, HelpSheet } from "./Overlays";
 import { DirectorCaptions } from "./DirectorCaptions";
 import { MethodologyPanel } from "./MethodologyPanel";
@@ -47,6 +49,9 @@ export function CommandCenter() {
         if (ui.paletteOpen || ui.helpOpen) {
           ui.setPalette(false);
           ui.setHelp(false);
+        } else if (t.viewMode === "room") {
+          t.setViewMode("isolate");
+          t.select(null);
         } else t.select(null);
       } else if (e.key === "?") ui.setHelp(!ui.helpOpen);
       else if (e.key === " ") {
@@ -102,6 +107,8 @@ export function CommandCenter() {
         <HelpSheet />
         <LoadingOverlay />
         <DirectorCaptions />
+        <DollhouseHud />
+        <AskCaption />
         <MethodologyPanel />
         <Onboarding />
       </div>

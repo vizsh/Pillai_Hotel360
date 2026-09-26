@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Search, X } from "lucide-react";
+import { Search, Sparkles, X } from "lucide-react";
 import { useUi } from "@/store/ui";
 import { useSim } from "@/store/sim";
 import { useTwin, type Selection } from "@/store/twin";
 import { getModel } from "@/lib/architecture/model";
 import { statusLabels } from "@/lib/twin/colors";
+import { resolveTwinQuery } from "@/lib/twin/queries";
 import { Kbd } from "@/components/ui/primitives";
 import { cn } from "@/lib/utils";
 
@@ -73,6 +74,16 @@ export function Palette() {
     return entries.filter((e) => e.title.toLowerCase().includes(t) || e.sub.toLowerCase().includes(t)).slice(0, 14);
   }, [q, entries]);
 
+  // "Show me" queries (lib/twin/queries.ts) — the same deterministic matcher the ops
+  // assistant uses, so typing "which rooms are at risk" here does exactly what asking the
+  // assistant the same question does: frame + pulse-highlight the matched rooms and caption
+  // the answer, instead of (or alongside) plain entity search.
+  const askResult = useMemo(() => {
+    const t = q.trim();
+    if (t.length < 3) return null;
+    return resolveTwinQuery(t, state, model);
+  }, [q, state, model]);
+
   useEffect(() => {
     if (open) {
       // Resetting local state when a prop/store value changes (here, the palette opening)
@@ -88,6 +99,11 @@ export function Palette() {
   if (!open) return null;
   const choose = (e: Entry) => {
     useTwin.getState().select(e.sel);
+    setOpen(false);
+  };
+  const chooseAsk = () => {
+    if (!askResult) return;
+    useTwin.getState().ask(askResult.rooms, askResult.caption);
     setOpen(false);
   };
   return (
@@ -110,6 +126,7 @@ export function Palette() {
                 e.preventDefault();
                 setIdx((i) => Math.max(0, i - 1));
               } else if (e.key === "Enter" && results[idx]) choose(results[idx]);
+              else if (e.key === "Enter" && askResult) chooseAsk();
               else if (e.key === "Escape") setOpen(false);
             }}
             placeholder="Search rooms, guests, assets, zones, staff…"
@@ -117,6 +134,19 @@ export function Palette() {
           />
           <Kbd>esc</Kbd>
         </div>
+        {askResult && (
+          <button
+            onClick={chooseAsk}
+            className="flex w-full items-center gap-3 border-b border-stroke bg-[#c084fc]/[0.06] px-3 py-2.5 text-left hover:bg-[#c084fc]/[0.12]"
+          >
+            <Sparkles size={14} className="shrink-0 text-[#c084fc]" />
+            <span className="flex-1">
+              <span className="block text-[12.5px] text-hi">Show me: {askResult.caption}</span>
+              <span className="block text-[10.5px] text-low">Frames and highlights the matching rooms on the twin</span>
+            </span>
+            <Kbd>enter</Kbd>
+          </button>
+        )}
         <ul className="max-h-[420px] overflow-y-auto p-1" role="listbox">
           {results.map((e, i) => (
             <li key={e.sel.kind + e.sel.id} role="option" aria-selected={i === idx}>
@@ -143,7 +173,7 @@ export function HelpSheet() {
   const rows: [string, string][] = [
     ["1 – 7", "View modes: orbit, exploded, floor, x-ray, plan, facade, site"],
     ["[ / ]", "Previous / next floor in floor mode"],
-    ["Q – Y", "Data layers: occupancy, risk, sentiment, revenue, housekeeping, energy"],
+    ["U, Q – Y", "Data layers: overall risk, occupancy, maintenance, sentiment, revenue, housekeeping, energy"],
     ["Space", "Pause / resume the simulation"],
     ["⌘K / Ctrl K", "Search rooms, guests, assets, staff"],
     ["T", "Start / stop cinematic tour"],

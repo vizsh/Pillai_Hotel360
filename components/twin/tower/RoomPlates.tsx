@@ -126,6 +126,20 @@ export function RoomPlates({ floor }: { floor: FloorSpec }) {
     if ((viewMode === "isolate" || viewMode === "room") && isolatedFloor !== null && isolatedFloor !== floor.index) return;
     useTwin.getState().select({ kind: "room", id: rooms[i].id });
   };
+  // Double-click drills straight into the "dollhouse" dive: select AND jump the camera
+  // inside the room in one gesture, rather than making every visitor find the sidebar's
+  // separate "Enter room" button. Single-click stays select-only on purpose — it's still
+  // the fast way to browse many rooms' data from an isolated floor view without diving into
+  // each one.
+  const onDoubleClick = (e: ThreeEvent<MouseEvent>) => {
+    e.stopPropagation();
+    const i = e.instanceId;
+    if (i === undefined) return;
+    const t = useTwin.getState();
+    if ((t.viewMode === "isolate" || t.viewMode === "room") && t.isolatedFloor !== null && t.isolatedFloor !== floor.index) return;
+    t.select({ kind: "room", id: rooms[i].id });
+    t.setViewMode("room");
+  };
   const onOver = (e: ThreeEvent<PointerEvent>) => {
     e.stopPropagation();
     const i = e.instanceId;
@@ -140,8 +154,8 @@ export function RoomPlates({ floor }: { floor: FloorSpec }) {
 
   return (
     <>
-      <instancedMesh ref={ref} args={[geo, mat, rooms.length]} onClick={onClick} onPointerOver={onOver} onPointerOut={onOut} frustumCulled={false} />
-      <instancedMesh ref={glow} args={[glowGeo, glowMat, rooms.length]} onClick={onClick} onPointerOver={onOver} onPointerOut={onOut} frustumCulled={false} />
+      <instancedMesh ref={ref} args={[geo, mat, rooms.length]} onClick={onClick} onDoubleClick={onDoubleClick} onPointerOver={onOver} onPointerOut={onOut} frustumCulled={false} />
+      <instancedMesh ref={glow} args={[glowGeo, glowMat, rooms.length]} onClick={onClick} onDoubleClick={onDoubleClick} onPointerOver={onOver} onPointerOut={onOut} frustumCulled={false} />
     </>
   );
 }
