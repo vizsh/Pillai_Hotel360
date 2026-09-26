@@ -5,6 +5,7 @@ import { useEffect } from "react";
 import { useTwin, type LayerId, type ViewMode } from "@/store/twin";
 import { useSim } from "@/store/sim";
 import { useUi } from "@/store/ui";
+import { useSession } from "@/store/session";
 import { useSimLoop } from "@/hooks/useSimLoop";
 import { useTelegramInbox } from "@/hooks/useTelegramInbox";
 import { TopBar } from "./TopBar";
@@ -28,6 +29,10 @@ const keyLayers: Record<string, LayerId> = { u: "risk", q: "occupancy", w: "main
 export function CommandCenter() {
   useSimLoop();
   useTelegramInbox();
+  const hydrate = useSession((s) => s.hydrate);
+  useEffect(() => {
+    void hydrate();
+  }, [hydrate]);
   const mobilePanel = useUi((s) => s.mobilePanel);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {

@@ -5,9 +5,13 @@ import { createPortal } from "react-dom";
 import Link from "next/link";
 import { LayoutGrid, ChevronDown, ArrowUpRight } from "lucide-react";
 import { routes } from "@/components/analytics/AnalyticsShell";
+import { useSession } from "@/store/session";
+import { allowedRoutes } from "@/lib/rbac";
 import { cn } from "@/lib/utils";
 
 export function DashboardMenu() {
+  const role = useSession((s) => s.role);
+  const visibleRoutes = allowedRoutes(role, routes);
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState({ top: 0, left: 0 });
   const btnRef = useRef<HTMLButtonElement>(null);
@@ -62,7 +66,7 @@ export function DashboardMenu() {
             className="glass fixed z-50 w-56 overflow-hidden p-1"
             style={{ top: pos.top, left: pos.left }}
           >
-            {routes.map((r) => (
+            {visibleRoutes.map((r) => (
               <Link
                 key={r.href}
                 href={r.href}

@@ -7,6 +7,6 @@ import { SESSION_COOKIE, verifySessionCookie } from "@/lib/auth/session";
 export async function GET() {
   const jar = await cookies();
   const session = verifySessionCookie(jar.get(SESSION_COOKIE)?.value);
-  if (!session) return NextResponse.json({ ok: false, user: null });
-  return NextResponse.json({ ok: true, user: { name: session.name, role: session.role, username: session.username } });
+  const body = session ? { ok: true, user: { name: session.name, role: session.role, username: session.username } } : { ok: false, user: null };
+  return NextResponse.json(body, { headers: { "Cache-Control": "no-store" } });
 }

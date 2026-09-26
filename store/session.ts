@@ -30,7 +30,7 @@ export const useSession = create<SessionStore>()((set) => ({
   hydrated: false,
   hydrate: async () => {
     try {
-      const res = await fetch("/api/auth/session");
+      const res = await fetch("/api/auth/session", { cache: "no-store" });
       const data = (await res.json()) as { ok: boolean; user: SessionUser | null };
       if (data.ok && data.user) set({ role: data.user.role, user: data.user, hydrated: true });
       else set({ hydrated: true });

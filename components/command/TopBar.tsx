@@ -1,12 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { Pause, Play, RotateCcw, Gauge, Bell, ChevronDown, Search, HelpCircle, BookOpen, Compass } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Pause, Play, RotateCcw, Gauge, Bell, ChevronDown, Search, HelpCircle, BookOpen, Compass, LogOut, ShieldCheck } from "lucide-react";
 import { useSim } from "@/store/sim";
 import { useUi } from "@/store/ui";
+import { useSession } from "@/store/session";
 import { useOnboarding } from "@/store/onboarding";
 import { useQuality, type QualityTier } from "@/store/quality";
 import { fmtClock } from "@/lib/sim/engine";
+import { ROLES } from "@/lib/rbac";
 import type { Scenario } from "@/lib/sim/types";
 import { Button, Kbd, Provenance } from "@/components/ui/primitives";
 import { DashboardMenu } from "./DashboardMenu";
@@ -38,6 +41,8 @@ export function TopBar() {
   const version = useSim((s) => s.version);
   const { state, setPaused, setSpeed, reset } = useSim();
   const { tier, setTier, fps, auto, setAuto } = useQuality();
+  const { role, user, logout } = useSession();
+  const router = useRouter();
   void version;
   const k = state.kpis;
   const prev = state.kpiHistory.length > 24 ? state.kpiHistory[state.kpiHistory.length - 25] : null;
@@ -58,6 +63,29 @@ export function TopBar() {
       <div className="mx-2 h-6 w-px bg-stroke" />
 
       <DashboardMenu />
+
+      <div className="mx-1 h-6 w-px bg-stroke" />
+
+      {/* Placed early in the header, not at the far right, on purpose: this header's KPI
+          section overflows on typical viewport widths (a pre-existing layout issue, not
+          something this feature should try to fully solve), and overflow-hidden silently
+          clips anything past the visible edge. Anything placed after the KPI row risks being
+          rendered but genuinely unreachable — exactly the bug reported ("no back option to
+          switch auth"): the sign-out button existed in the DOM the whole time, just off-screen. */}
+      <div className="flex items-center gap-1.5 rounded-md border border-stroke bg-white/[0.02] px-2 py-1 text-[11.5px] text-mid" title={ROLES[role].description}>
+        <ShieldCheck size={12} className="text-accent" />
+        {user ? `${user.name} · ${ROLES[role].label}` : ROLES[role].label}
+      </div>
+      <button
+        onClick={() => {
+          void logout().then(() => router.push("/login"));
+        }}
+        className="grid h-8 w-8 shrink-0 place-items-center rounded-md text-low hover:bg-white/5 hover:text-hi"
+        aria-label="Sign out"
+        title="Sign out"
+      >
+        <LogOut size={13} />
+      </button>
 
       <div className="mx-2 h-6 w-px bg-stroke" />
 
@@ -90,7 +118,7 @@ export function TopBar() {
 
       <div className="mx-2 h-6 w-px bg-stroke" />
 
-      <div className="flex flex-1 items-center divide-x divide-stroke">
+      <div className="scrollbar-thin flex min-w-0 flex-1 items-center divide-x divide-stroke overflow-x-auto">
         <Kpi label="Occupancy" value={fmtPct(k.occupancy)} delta={d(k.occupancy, prev?.occupancy, (n) => fmtPct(n))} />
         <Kpi label="ADR" value={fmtINR(k.adr)} delta={d(k.adr, prev?.adr, (n) => fmtINR(n))} />
         <Kpi label="RevPAR" value={fmtINR(k.revpar)} delta={d(k.revpar, prev?.revpar, (n) => fmtINR(n))} />
