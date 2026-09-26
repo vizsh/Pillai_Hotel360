@@ -16,6 +16,9 @@ interface UiStore {
    * effect depends on this flag). Manual mode (the default) is completely unchanged by this
    * feature existing at all. */
   autopilot: boolean;
+  /** "Automation Scenarios" panel (LeftRail's Autopilot mode) — a curated, explain-then-run
+   * catalog distinct from the bare autopilot countdown, see lib/sim/scenarioCatalog.ts. */
+  scenarioPanelOpen: boolean;
   mobilePanel: MobilePanel;
   methodologyModule: ModuleId | null;
   setTwinReady: (v: boolean) => void;
@@ -23,6 +26,7 @@ interface UiStore {
   setHelp: (v: boolean) => void;
   setWhatIf: (v: boolean) => void;
   setAutopilot: (v: boolean) => void;
+  setScenarioPanelOpen: (v: boolean) => void;
   setMobilePanel: (p: MobilePanel) => void;
   openMethodology: (m: ModuleId) => void;
   closeMethodology: () => void;
@@ -35,6 +39,7 @@ export const useUi = create<UiStore>()(
     helpOpen: false,
     whatIfOpen: false,
     autopilot: false,
+    scenarioPanelOpen: false,
     mobilePanel: "none",
     methodologyModule: null,
     setTwinReady: (twinReady) => set({ twinReady }),
@@ -42,6 +47,7 @@ export const useUi = create<UiStore>()(
     setHelp: (helpOpen) => set({ helpOpen }),
     setWhatIf: (whatIfOpen) => set({ whatIfOpen }),
     setAutopilot: (autopilot) => set({ autopilot }),
+    setScenarioPanelOpen: (scenarioPanelOpen) => set({ scenarioPanelOpen }),
     setMobilePanel: (mobilePanel) => set((s) => ({ mobilePanel: s.mobilePanel === mobilePanel ? "none" : mobilePanel })),
     openMethodology: (methodologyModule) => set({ methodologyModule }),
     closeMethodology: () => set({ methodologyModule: null }),

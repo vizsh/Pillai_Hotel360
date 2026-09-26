@@ -21,6 +21,7 @@ import { WhatIfPanel } from "./WhatIfPanel";
 import { LoadingOverlay, Palette, HelpSheet } from "./Overlays";
 import { DirectorCaptions } from "./DirectorCaptions";
 import { MethodologyPanel } from "./MethodologyPanel";
+import { AutomationScenariosPanel } from "./AutomationScenariosPanel";
 import { Onboarding } from "./Onboarding";
 import { cn } from "@/lib/utils";
 
@@ -125,6 +126,7 @@ export function CommandCenter() {
         <AskCaption />
         {whatIfOpen && <WhatIfPanel onClose={() => setWhatIf(false)} />}
         <MethodologyPanel />
+        <AutomationScenariosPanel />
         <Onboarding />
       </div>
     </div>

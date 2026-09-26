@@ -96,6 +96,13 @@ export function LeftRail() {
             ? "Demo mode: every pending recommendation executes itself on a short countdown — real execution, just without the click. Switch back to Manual any time."
             : "Every recommendation waits for a human Accept — the default. Switch to Autopilot for a glimpse of a fully automated resort."}
         </p>
+        <button
+          onClick={() => useUi.getState().setScenarioPanelOpen(true)}
+          className="mono mt-1 flex items-center justify-center gap-1.5 rounded-md border border-warm/40 bg-warm/10 px-2 py-1.5 text-[11px] text-warm hover:bg-warm/20"
+        >
+          <Zap size={12} /> Automation scenarios
+        </button>
+        <p className="px-1 text-[10.5px] leading-snug text-low">Runs one curated scenario at a time — independent of the Manual/Autopilot toggle above, so the rest of the queue stays put.</p>
       </div>
 
       <div className="glass flex flex-col gap-1 p-2">
