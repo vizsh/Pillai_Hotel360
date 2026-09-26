@@ -13,6 +13,8 @@ export const config = {
 };
 
 export function middleware(req: NextRequest) {
+  // The public marketing landing page (app/route.ts) — never gated, same as /login itself.
+  if (req.nextUrl.pathname === "/") return NextResponse.next();
   const session = verifySessionCookie(req.cookies.get(SESSION_COOKIE)?.value);
   if (!session) {
     const url = req.nextUrl.clone();

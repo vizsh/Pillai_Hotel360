@@ -50,7 +50,7 @@ export function TopBar() {
 
   return (
     <header className="glass pointer-events-auto flex h-14 shrink-0 items-center gap-4 overflow-hidden px-4">
-      <Link href="/" className="flex items-center gap-2.5">
+      <Link href="/command" className="flex items-center gap-2.5">
         <span className="grid h-7 w-7 place-items-center rounded-md bg-accent/15 text-accent">
           <span className="h-2.5 w-2.5 rounded-sm bg-accent shadow-[0_0_10px_var(--accent)]" />
         </span>
