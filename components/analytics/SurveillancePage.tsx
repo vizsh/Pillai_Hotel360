@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { Car, Square, Gauge } from "lucide-react";
 import { useSim } from "@/store/sim";
 import { addAlert } from "@/lib/sim/engine";
 import { loadCocoModel, type DetectedObject } from "@/lib/vision/coco";
@@ -13,19 +14,21 @@ import { Button, Tag } from "@/components/ui/primitives";
 import { cn } from "@/lib/utils";
 
 const SAMPLE_INTERVAL_MS = 280;
+const SPEEDS = [1, 2, 3] as const;
 
 type ModelStatus = "idle" | "loading" | "ready";
 
-/** Runs entirely once per explicit "Run detection" click — no auto-loop, no auto-restart on
- * end (per instruction: looping caused delay and alert spam). Detection boxes and heuristic
- * readouts are drawn live on an overlay canvas as the clip plays through exactly once; a
- * confirmed (persistence-gated) event writes a real alert into the same state.alerts/feed the
- * rest of the app uses, so it shows up in BottomDock like anything else. */
+/** Loops continuously once started (a real CCTV feed never "ends") — click Stop to end the
+ * run, click Run detection again to restart the detectors fresh. Detection boxes and heuristic
+ * readouts draw live on an overlay canvas; a confirmed (persistence-gated) event writes a real
+ * alert into the same state.alerts/feed the rest of the app uses, so it shows up in BottomDock
+ * like anything else. */
 export function SurveillancePage() {
   const [category, setCategory] = useState<DetectionCategory>("fire");
   const [clip, setClip] = useState<ClipMeta>(CLIPS.fire[0]);
   const [modelStatus, setModelStatus] = useState<ModelStatus>("idle");
   const [running, setRunning] = useState(false);
+  const [speed, setSpeed] = useState<(typeof SPEEDS)[number]>(1);
   const [log, setLog] = useState<string[]>([]);
   const [parkingZones, setParkingZones] = useState<ParkingZone[] | null>(null);
   const [liveReadout, setLiveReadout] = useState("");
@@ -38,15 +41,28 @@ export function SurveillancePage() {
   const detectorsRef = useRef<{ fire?: FireHeuristicDetector; alt?: AltercationHeuristicDetector }>({});
   const confirmedCountRef = useRef(0);
   const parkingZonesRef = useRef<ParkingZone[] | null>(null);
+  const runningRef = useRef(false);
 
   const append = (line: string) => setLog((prev) => [...prev.slice(-40), line]);
 
-  const stop = () => {
+  const stop = (opts?: { summarize?: boolean }) => {
     if (intervalRef.current) clearInterval(intervalRef.current);
     intervalRef.current = null;
+    const video = videoRef.current;
+    if (video) {
+      video.pause();
+      video.loop = false;
+    }
+    if (opts?.summarize && runningRef.current) {
+      append(`Stopped — ${confirmedCountRef.current} confirmed event${confirmedCountRef.current === 1 ? "" : "s"} this run.`);
+    }
+    runningRef.current = false;
     setRunning(false);
   };
 
+  // stop() is intentionally excluded — it's a stable-enough cleanup-only reference and adding
+  // it would re-run this effect (and stop a fresh run) on every unrelated re-render.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => stop, [category, clip]);
 
   const drawBoxes = (ctx: CanvasRenderingContext2D, video: HTMLVideoElement, boxes: { x: number; y: number; w: number; h: number; label: string; color: string }[]) => {
@@ -89,30 +105,21 @@ export function SurveillancePage() {
     const model = category !== "fire" ? await loadCocoModel() : null;
 
     video.currentTime = 0;
+    video.loop = true;
+    video.playbackRate = speed;
     await video.play();
     if (myRun !== runIdRef.current) return;
+    runningRef.current = true;
     setRunning(true);
-    append(`Run started — ${CATEGORY_META[category].label} · ${clip.label}`);
+    append(`Run started — ${CATEGORY_META[category].label} · ${clip.label} · looping at ${speed}×`);
 
     canvas.width = video.clientWidth;
     canvas.height = video.clientHeight;
     const ctx = canvas.getContext("2d")!;
 
-    const finish = () => {
-      stop();
-      append(`Run complete — ${confirmedCountRef.current} confirmed event${confirmedCountRef.current === 1 ? "" : "s"}.`);
-      if (category === "parking" && parkingZonesRef.current) {
-        const occ = parkingZonesRef.current.filter((z) => z.occupied).length;
-        append(`Final occupancy snapshot: ${occ}/${parkingZonesRef.current.length} zones occupied.`);
-      }
-    };
-
     const sampleOnce = async () => {
       if (myRun !== runIdRef.current || busyRef.current) return;
-      if (video.ended || video.paused) {
-        finish();
-        return;
-      }
+      if (video.paused) return;
       busyRef.current = true;
       try {
         canvas.width = video.clientWidth;
@@ -144,9 +151,18 @@ export function SurveillancePage() {
           drawBoxes(
             ctx,
             video,
-            people.map((p) => ({ x: p.bbox[0], y: p.bbox[1], w: p.bbox[2], h: p.bbox[3], label: `person ${(p.score * 100).toFixed(0)}%`, color: s.passed ? "#fb7185" : "#60a5fa" })),
+            people.map((p) => ({
+              x: p.bbox[0],
+              y: p.bbox[1],
+              w: p.bbox[2],
+              h: p.bbox[3],
+              label: `person ${(p.score * 100).toFixed(0)}%`,
+              color: s.passed ? "#fb7185" : s.personDown ? "#f5a524" : "#60a5fa",
+            })),
           );
-          setLiveReadout(`people ${s.peopleCount} · max box-overlap ${(s.maxOverlapIoU * 100).toFixed(0)}% · motion ${s.avgMotion.toFixed(1)}px/sample · gate ${s.passed ? "ARMED" : "clear"}`);
+          setLiveReadout(
+            `people ${s.peopleCount} · max box-overlap ${(s.maxOverlapIoU * 100).toFixed(0)}% · motion ${s.avgMotion.toFixed(1)}px/sample · contact-gate ${s.passed ? "ARMED" : "clear"} · down-gate ${s.personDown ? "ARMED" : "clear"}`,
+          );
           if (s.justConfirmed) {
             confirmedCountRef.current++;
             append(`ALTERCATION signature confirmed at ${video.currentTime.toFixed(1)}s — ${s.peopleCount} people, box-overlap ${(s.maxOverlapIoU * 100).toFixed(0)}%, motion ${s.avgMotion.toFixed(1)}px/sample, sustained 4/6 samples`);
@@ -158,6 +174,20 @@ export function SurveillancePage() {
                 targetId: "cctv-altercation",
                 title: `Possible altercation detected — ${clip.label}`,
                 body: `${s.peopleCount} people in sustained close contact (box-overlap ${(s.maxOverlapIoU * 100).toFixed(0)}%) with elevated motion (${s.avgMotion.toFixed(1)}px/sample), sustained 4/6 samples at ${video.currentTime.toFixed(1)}s into the feed.`,
+              }),
+            );
+          }
+          if (s.justConfirmedDown) {
+            confirmedCountRef.current++;
+            append(`PERSON DOWN signature confirmed at ${video.currentTime.toFixed(1)}s — bounding-box aspect ratio elevated well above this person's own standing baseline, sustained 4/6 samples (possible collapse/distress)`);
+            useSim.getState().mutate((st) =>
+              addAlert(st, {
+                severity: "warn",
+                kind: "person-down",
+                targetKind: "zone",
+                targetId: "cctv-altercation",
+                title: `Possible person down — ${clip.label}`,
+                body: `A detected person's bounding-box width/height ratio has risen well above a standing posture's typical ~0.4-0.5 (a lower, wider box — crouched, seated or collapsed), sustained 4/6 samples at ${video.currentTime.toFixed(1)}s.`,
               }),
             );
           }
@@ -189,19 +219,18 @@ export function SurveillancePage() {
     };
 
     intervalRef.current = setInterval(() => void sampleOnce(), SAMPLE_INTERVAL_MS);
-    video.addEventListener(
-      "ended",
-      () => {
-        if (myRun === runIdRef.current) finish();
-      },
-      { once: true },
-    );
   };
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => stop, []);
 
+  const occupied = parkingZones?.filter((z) => z.occupied).length ?? 0;
+  const totalZones = parkingZones?.length ?? GRID_COLS * GRID_ROWS;
+  const utilizationPct = totalZones ? Math.round((occupied / totalZones) * 100) : 0;
+  const zoneLabel = (row: number, col: number) => `${String.fromCharCode(65 + row)}${col + 1}`;
+
   return (
-    <AnalyticsShell title="Surveillance Intelligence" subtitle="Real, once-through detection over user-supplied test clips — no auto-loop. Click Run detection to analyze a clip; confirmed events post real alerts into the shared feed.">
+    <AnalyticsShell title="Surveillance Intelligence" subtitle="Loops continuously once started — click Run detection, then Stop when you're done. Confirmed events post real alerts into the shared feed.">
       <div className="grid grid-cols-3 gap-3">
         {(Object.keys(CATEGORY_META) as DetectionCategory[]).map((c) => (
           <button
@@ -239,9 +268,31 @@ export function SurveillancePage() {
               {c.label}
             </button>
           ))}
-          <Button size="sm" variant="primary" className="ml-auto" onClick={run} disabled={modelStatus === "loading"}>
-            {modelStatus === "loading" ? "Loading model…" : running ? "Restart detection" : "Run detection"}
-          </Button>
+          <div className="ml-auto flex items-center gap-2">
+            <div className="mono flex items-center gap-1 rounded-md border border-stroke px-1 py-1 text-[11px]">
+              <Gauge size={12} className="ml-1 text-low" />
+              {SPEEDS.map((sp) => (
+                <button
+                  key={sp}
+                  onClick={() => {
+                    setSpeed(sp);
+                    if (videoRef.current) videoRef.current.playbackRate = sp;
+                  }}
+                  className={cn("rounded px-1.5 py-0.5", speed === sp ? "bg-accent/20 text-accent" : "text-low hover:text-hi")}
+                >
+                  {sp}×
+                </button>
+              ))}
+            </div>
+            {running && (
+              <Button size="sm" variant="ghost" onClick={() => stop({ summarize: true })}>
+                <Square size={12} /> Stop
+              </Button>
+            )}
+            <Button size="sm" variant="primary" onClick={run} disabled={modelStatus === "loading"}>
+              {modelStatus === "loading" ? "Loading model…" : running ? "Restart detection" : "Run detection"}
+            </Button>
+          </div>
         </div>
       </Card>
 
@@ -250,35 +301,74 @@ export function SurveillancePage() {
           <div className="relative w-full overflow-hidden rounded-lg bg-black">
             <video ref={videoRef} src={clip.src} className="block w-full" muted playsInline />
             <canvas ref={canvasRef} className="pointer-events-none absolute left-0 top-0 h-full w-full" />
+            {running && (
+              <span className="absolute right-2 top-2 flex items-center gap-1.5 rounded-full bg-critical/90 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-white">
+                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-white" /> Live · {speed}×
+              </span>
+            )}
           </div>
           {liveReadout && <p className="mono mt-2 text-[11px] text-warm">{liveReadout}</p>}
         </Card>
 
         <div className="flex flex-col gap-3">
-          {category === "parking" && parkingZones && (
-            <Card title="Zone occupancy grid">
-              <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${GRID_COLS}, 1fr)` }}>
-                {parkingZones.map((z) => (
-                  <div key={`${z.row}-${z.col}`} className={cn("flex aspect-video items-center justify-center rounded text-[10px] font-medium", z.occupied ? "bg-[#c084fc]/30 text-[#c084fc]" : "bg-white/5 text-low")}>
-                    {z.occupied ? z.vehicleCount : "—"}
+          {category === "parking" && (
+            <Card title="Lot occupancy">
+              <div className="mb-3 grid grid-cols-3 gap-2">
+                <div className="rounded-lg border border-stroke bg-white/[0.02] p-2 text-center">
+                  <div className="mono text-[18px] font-semibold text-hi">{totalZones}</div>
+                  <div className="text-[10px] uppercase tracking-wider text-low">Zones</div>
+                </div>
+                <div className="rounded-lg border border-[#c084fc]/30 bg-[#c084fc]/10 p-2 text-center">
+                  <div className="mono text-[18px] font-semibold text-[#c084fc]">{occupied}</div>
+                  <div className="text-[10px] uppercase tracking-wider text-low">Occupied</div>
+                </div>
+                <div className="rounded-lg border border-positive/30 bg-positive/10 p-2 text-center">
+                  <div className="mono text-[18px] font-semibold text-positive">{totalZones - occupied}</div>
+                  <div className="text-[10px] uppercase tracking-wider text-low">Free</div>
+                </div>
+              </div>
+              <div className="mb-3">
+                <div className="mb-1 flex items-center justify-between text-[10.5px] text-low">
+                  <span>Utilization</span>
+                  <span className="mono text-hi">{utilizationPct}%</span>
+                </div>
+                <div className="h-2 w-full overflow-hidden rounded-full bg-white/5">
+                  <div className="h-full rounded-full bg-gradient-to-r from-[#c084fc] to-[#f472b6] transition-[width] duration-500" style={{ width: `${utilizationPct}%` }} />
+                </div>
+              </div>
+              <div className="grid gap-1.5" style={{ gridTemplateColumns: `repeat(${GRID_COLS}, 1fr)` }}>
+                {(parkingZones ?? Array.from({ length: GRID_ROWS * GRID_COLS }, (_, i) => ({ row: Math.floor(i / GRID_COLS), col: i % GRID_COLS, occupied: false, vehicleCount: 0 }))).map((z) => (
+                  <div
+                    key={`${z.row}-${z.col}`}
+                    className={cn(
+                      "relative flex aspect-square flex-col items-center justify-center gap-0.5 rounded-lg border transition-colors",
+                      z.occupied ? "border-[#c084fc]/50 bg-[#c084fc]/15 shadow-[0_0_12px_-4px_#c084fc]" : "border-dashed border-stroke bg-white/[0.015]",
+                    )}
+                  >
+                    <span className="mono absolute left-1 top-0.5 text-[8.5px] text-low">{zoneLabel(z.row, z.col)}</span>
+                    {z.occupied ? (
+                      <>
+                        <Car size={16} className="text-[#c084fc]" />
+                        {z.vehicleCount > 1 && <span className="mono text-[9px] text-[#c084fc]">×{z.vehicleCount}</span>}
+                      </>
+                    ) : (
+                      <span className="text-[9px] text-low/60">free</span>
+                    )}
                   </div>
                 ))}
               </div>
-              <p className="mono mt-2 text-[10.5px] text-low">
-                {parkingZones.filter((z) => z.occupied).length}/{parkingZones.length} zones occupied · {GRID_COLS}×{GRID_ROWS} grid over the frame
-              </p>
             </Card>
           )}
 
           <Card title="Detection log">
             <ul className="scrollbar-thin flex max-h-[360px] flex-col gap-1.5 overflow-y-auto">
               {log.map((line, i) => (
-                <li key={i} className="mono flex gap-2 text-[11px] leading-snug text-mid">
+                <li key={i} className={cn("mono flex gap-2 text-[11px] leading-snug", line.includes("confirmed") ? "text-critical" : "text-mid")}>
                   <span className="text-low">{String(i + 1).padStart(2, "0")}</span>
                   <span>{line}</span>
                 </li>
               ))}
-              {!log.length && <li className="text-[11.5px] text-low">Click Run detection to start — nothing runs automatically.</li>}
+              {!log.length && <li className="text-[11.5px] text-low">Click Run detection to start.</li>}
             </ul>
           </Card>
         </div>
