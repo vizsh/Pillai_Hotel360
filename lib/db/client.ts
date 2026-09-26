@@ -68,6 +68,17 @@ function init(): DatabaseSync {
       processed_at TEXT
     );
     CREATE INDEX IF NOT EXISTS idx_telegram_inbox_unprocessed ON telegram_inbox (processed_at);
+    CREATE TABLE IF NOT EXISTS guest_app_inbox (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      room_number TEXT NOT NULL,
+      stay_id TEXT,
+      guest_name TEXT,
+      req_type TEXT NOT NULL,
+      payload_json TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      processed_at TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_guest_app_inbox_unprocessed ON guest_app_inbox (processed_at);
     CREATE TABLE IF NOT EXISTS users (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       username TEXT NOT NULL UNIQUE,

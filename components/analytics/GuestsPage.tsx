@@ -14,6 +14,7 @@ import { resortExperienceIndex } from "@/lib/intelligence/guestExperience";
 import { applyNextBestAction } from "@/lib/sim/actions";
 import { acceptRecommendation } from "@/lib/api/recommendationActions";
 import { AnalyticsShell, Card, chartTheme } from "./AnalyticsShell";
+import { GuestAppQrCard } from "./GuestAppQrCard";
 import { Button, Provenance, Stat, Tag } from "@/components/ui/primitives";
 import { fmtINR, cn } from "@/lib/utils";
 import { pushFeed } from "@/lib/sim/engine";
@@ -56,6 +57,8 @@ export function GuestsPage() {
           Signed in as {ROLES[role].label}: {ROLES[role].description} Guest spend figures below are replaced with a redacted cue, per the PS&apos;s own privacy guidance.
         </p>
       )}
+
+      <GuestAppQrCard />
 
       <Card title="Guest Experience Index" right={<Provenance kind="derived" />}>
         <p className="mb-3 text-[11.5px] text-mid">

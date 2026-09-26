@@ -5,6 +5,7 @@ import type { NextBestAction } from "@/lib/intelligence/personalization";
 import { pushFeed, scheduleService, resolveAlert, nextId, createRequest, dispatchStaff, addAlert, refreshRecommendations } from "./engine";
 import { rateForRoom } from "./seed";
 import { classify } from "@/lib/intelligence/concierge";
+import { mapGuestAppRequestType } from "@/lib/integration/guestAppAdapter";
 import { clamp } from "@/lib/utils";
 
 /** The one place an accepted next-best-action's effect actually gets applied — sentiment
@@ -282,6 +283,24 @@ export function reportIssueFromStaff(state: SimState, model: ResortModel, roomId
   const cell = model.roomById.get(roomId);
   pushFeed(state, "task", `${staffName} reported via Telegram: "${text}"${cell ? ` — ${cell.number}` : ""}`, "room", roomId, c.urgency === "high" ? "warn" : "info");
   dispatchStaff(state, model, req, c.dept === "frontdesk" ? "frontdesk" : c.dept);
+  return req;
+}
+
+/** Applies an order/request that originated in the separate guestexperience guest app
+ * (app/api/guest-app/inbox — see that route's comment for why this bridge exists at all: two
+ * independently-deployed apps, no shared database, an HTTP inbox is the only real connection
+ * possible today). reqType is guestexperience's own ReqType string, translated via
+ * lib/integration/guestAppAdapter's mapGuestAppRequestType — kept a separate action rather than
+ * reusing reportIssueFromStaff so the feed/source attribution honestly says "guest app", not
+ * "staff". */
+export function applyGuestAppOrder(state: SimState, model: ResortModel, roomId: string, guestName: string, reqType: string, text: string) {
+  const room = state.rooms[roomId];
+  const guestId = room?.guestId ?? null;
+  const type = mapGuestAppRequestType(reqType);
+  const req = createRequest(state, model, roomId, type, text, "guest", type === "complaint" ? 15 : 30, guestId);
+  const cell = model.roomById.get(roomId);
+  pushFeed(state, "task", `${guestName || "Guest"} via guest app: "${text}"${cell ? ` — ${cell.number}` : ""}`, "room", roomId, type === "complaint" ? "warn" : "info");
+  dispatchStaff(state, model, req, type === "complaint" ? "frontdesk" : type === "fnb" ? "fnb" : type === "housekeeping" ? "housekeeping" : type === "maintenance" ? "engineering" : "concierge");
   return req;
 }
 

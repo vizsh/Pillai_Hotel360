@@ -8,6 +8,7 @@ import { useSim } from "@/store/sim";
 import { useSession } from "@/store/session";
 import { useSimLoop } from "@/hooks/useSimLoop";
 import { useTelegramInbox } from "@/hooks/useTelegramInbox";
+import { useGuestAppInbox } from "@/hooks/useGuestAppInbox";
 import { useLiveWeather } from "@/hooks/useLiveWeather";
 import { fmtClock } from "@/lib/sim/engine";
 import { Button, Provenance } from "@/components/ui/primitives";
@@ -33,6 +34,7 @@ export const routes = [
 export function AnalyticsShell({ title, subtitle, children }: { title: string; subtitle: string; children: React.ReactNode }) {
   useSimLoop();
   useTelegramInbox();
+  useGuestAppInbox();
   useLiveWeather();
   const path = usePathname();
   const router = useRouter();
