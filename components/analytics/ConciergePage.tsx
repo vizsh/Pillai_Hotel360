@@ -10,6 +10,7 @@ import { handleGuestMessage } from "@/lib/intelligence/concierge";
 import type { GuestPromptContext } from "@/lib/ai/conciergePrompt";
 import { fmtClock } from "@/lib/sim/engine";
 import { AnalyticsShell, Card } from "./AnalyticsShell";
+import { GuestPhoneMock } from "./GuestPhoneMock";
 import { Button, Provenance, Stat, Tag } from "@/components/ui/primitives";
 import { cn } from "@/lib/utils";
 
@@ -43,6 +44,7 @@ export function ConciergePage() {
   const [text, setText] = useState("");
   const scroller = useRef<HTMLDivElement>(null);
   const [aiEnabled, setAiEnabled] = useState(true);
+  const [rightTab, setRightTab] = useState<"log" | "guest">("log");
   const [ollama, setOllama] = useState<OllamaStatus | null>(null);
   const [thinking, setThinking] = useState(false);
 
@@ -261,35 +263,58 @@ export function ConciergePage() {
           </form>
         </Card>
 
-        <Card title="Classification log" right={<Provenance module="concierge" />} className="col-span-4">
-          <div className="scrollbar-thin flex max-h-[560px] flex-col gap-1 overflow-y-auto">
-            {log.length === 0 && <p className="text-[12px] text-low">No messages classified yet.</p>}
-            {log.map((m) => {
-              const r = m.roomId ? model.roomById.get(m.roomId) : null;
-              return (
-                <button
-                  key={m.id}
-                  onClick={() => m.roomId && setRoomId(m.roomId)}
-                  className="flex items-start gap-2 rounded-md px-2 py-1.5 text-left hover:bg-white/5"
-                >
-                  <span className="h-1.5 w-1.5 shrink-0 translate-y-1.5 rounded-full" style={{ background: intentColor[m.intent!] }} />
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-1.5">
-                      <span className="mono text-[10px] uppercase tracking-wider" style={{ color: intentColor[m.intent!] }}>
-                        {m.intent}
-                      </span>
-                      <span className="mono text-[10px] text-low">conf {m.confidence?.toFixed(2)}</span>
-                      {m.urgency === "high" && <Tag color="#f5a524">urgent</Tag>}
-                      <ChevronRight size={10} className="text-low" />
-                      <span className="text-[10.5px] text-mid">{r?.number}</span>
+        <Card
+          title={rightTab === "log" ? "Classification log" : "Guest's own phone"}
+          right={
+            <div className="flex items-center gap-1 rounded-md bg-white/5 p-0.5">
+              <button
+                onClick={() => setRightTab("log")}
+                className={cn("rounded px-2 py-1 text-[10.5px] transition-colors", rightTab === "log" ? "bg-accent/20 text-accent" : "text-low hover:text-hi")}
+              >
+                Log
+              </button>
+              <button
+                onClick={() => setRightTab("guest")}
+                className={cn("rounded px-2 py-1 text-[10.5px] transition-colors", rightTab === "guest" ? "bg-accent/20 text-accent" : "text-low hover:text-hi")}
+              >
+                Guest view
+              </button>
+            </div>
+          }
+          className="col-span-4"
+        >
+          {rightTab === "guest" ? (
+            <GuestPhoneMock messages={roomChat} guestName={guest?.name ?? null} roomNumber={room?.number ?? null} thinking={thinking} />
+          ) : (
+            <div className="scrollbar-thin flex max-h-[560px] flex-col gap-1 overflow-y-auto">
+              {log.length === 0 && <p className="text-[12px] text-low">No messages classified yet.</p>}
+              {log.map((m) => {
+                const r = m.roomId ? model.roomById.get(m.roomId) : null;
+                return (
+                  <button
+                    key={m.id}
+                    onClick={() => m.roomId && setRoomId(m.roomId)}
+                    className="flex items-start gap-2 rounded-md px-2 py-1.5 text-left hover:bg-white/5"
+                  >
+                    <span className="h-1.5 w-1.5 shrink-0 translate-y-1.5 rounded-full" style={{ background: intentColor[m.intent!] }} />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5">
+                        <span className="mono text-[10px] uppercase tracking-wider" style={{ color: intentColor[m.intent!] }}>
+                          {m.intent}
+                        </span>
+                        <span className="mono text-[10px] text-low">conf {m.confidence?.toFixed(2)}</span>
+                        {m.urgency === "high" && <Tag color="#f5a524">urgent</Tag>}
+                        <ChevronRight size={10} className="text-low" />
+                        <span className="text-[10.5px] text-mid">{r?.number}</span>
+                      </div>
+                      <p className="mt-0.5 truncate text-[11.5px] text-hi">{m.text}</p>
                     </div>
-                    <p className="mt-0.5 truncate text-[11.5px] text-hi">{m.text}</p>
-                  </div>
-                  <span className="mono shrink-0 text-[10px] text-low">{fmtClock(m.t)}</span>
-                </button>
-              );
-            })}
-          </div>
+                    <span className="mono shrink-0 text-[10px] text-low">{fmtClock(m.t)}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </Card>
       </div>
     </AnalyticsShell>

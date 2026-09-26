@@ -4,6 +4,7 @@ import { subscribeWithSelector } from "zustand/middleware";
 export type ViewMode = "orbit" | "exploded" | "isolate" | "xray" | "room" | "top" | "facade" | "site";
 
 export type LayerId =
+  | "risk"
   | "occupancy"
   | "maintenance"
   | "sentiment"
@@ -71,6 +72,7 @@ export const useTwin = create<TwinStore>()(
 if (typeof window !== "undefined" && process.env.NODE_ENV !== "production") (window as unknown as { __twin: typeof useTwin }).__twin = useTwin;
 
 export const layerMeta: Record<LayerId, { label: string; short: string; description: string; kind: "categorical" | "sequential" | "diverging" }> = {
+  risk: { label: "Overall Risk", short: "RISK", description: "One composite score per room — blends maintenance failure risk, guest sentiment, housekeeping backlog and energy waste, so every room that needs attention is visible in a single glance.", kind: "sequential" },
   occupancy: { label: "Occupancy", short: "OCC", description: "Room state: vacant, dirty, occupied, VIP, out of order.", kind: "categorical" },
   maintenance: { label: "Maintenance Risk", short: "RISK", description: "Predicted 7-day failure probability attached to the assets serving each room.", kind: "sequential" },
   sentiment: { label: "Sentiment", short: "SENT", description: "Aspect-scored guest sentiment for the in-house guest of each room.", kind: "diverging" },

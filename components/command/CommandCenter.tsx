@@ -21,7 +21,7 @@ import { cn } from "@/lib/utils";
 const TwinCanvas = dynamic(() => import("@/components/twin/TwinCanvas").then((m) => m.TwinCanvas), { ssr: false });
 
 const keyModes: Record<string, ViewMode> = { "1": "orbit", "2": "exploded", "3": "isolate", "4": "xray", "5": "top", "6": "facade", "7": "site" };
-const keyLayers: Record<string, LayerId> = { q: "occupancy", w: "maintenance", e: "sentiment", r: "revenue", t: "housekeeping", y: "energy" };
+const keyLayers: Record<string, LayerId> = { u: "risk", q: "occupancy", w: "maintenance", e: "sentiment", r: "revenue", t: "housekeeping", y: "energy" };
 
 export function CommandCenter() {
   useSimLoop();

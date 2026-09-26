@@ -62,8 +62,8 @@ const rampCss: Record<string, string> = {
   heat: "linear-gradient(90deg,#14263a,#5b6879,#f5a524,#f4436c)",
   diverging: "linear-gradient(90deg,#f4436c,#5b6879,#2a3647,#34d399)",
 };
-const layerRamp: Record<LayerId, string> = { occupancy: "", maintenance: "heat", sentiment: "diverging", revenue: "cyan", housekeeping: "heat", energy: "cyan" };
-const layerEnds: Record<LayerId, [string, string]> = { occupancy: ["", ""], maintenance: ["0%", "99%"], sentiment: ["−1", "+1"], revenue: ["₹0", "₹210k"], housekeeping: ["0 min", "45 min"], energy: ["0", "48 kWh"] };
+const layerRamp: Record<LayerId, string> = { risk: "heat", occupancy: "", maintenance: "heat", sentiment: "diverging", revenue: "cyan", housekeeping: "heat", energy: "cyan" };
+const layerEnds: Record<LayerId, [string, string]> = { risk: ["low", "critical"], occupancy: ["", ""], maintenance: ["0%", "99%"], sentiment: ["−1", "+1"], revenue: ["₹0", "₹210k"], housekeeping: ["0 min", "45 min"], energy: ["0", "48 kWh"] };
 
 export function LeftRail() {
   const { viewMode, setViewMode, isolatedFloor, setIsolatedFloor, activeLayer, setLayer, showStaff, showAlerts, showLabels, showGuests, toggle, tourPlaying, setTour } = useTwin();

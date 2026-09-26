@@ -40,8 +40,27 @@ const statusColorCache = Object.fromEntries(
   Object.entries(statusColors).map(([k, v]) => [k, c(v)]),
 ) as Record<RoomStatus, THREE.Color>;
 
+/** Weights for the composite "risk" layer below — sum to 1 so the result stays a clean 0-1
+ * score comparable across rooms regardless of which components are active for a given room
+ * (a vacant room has no sentiment to weigh, for instance, and simply scores 0 on that term). */
+const RISK_WEIGHTS = { maintenance: 0.4, sentiment: 0.3, housekeeping: 0.15, energyWaste: 0.15 };
+
+export function compositeRisk(st: RoomState): number {
+  const maintenance = st.maintRisk;
+  const sentiment = st.sentiment === null ? 0 : clamp((1 - st.sentiment) / 2, 0, 1);
+  const housekeeping = clamp(st.hkMinutes / 45, 0, 1);
+  const energyWaste = st.conditioned && !st.guestId ? 1 : 0;
+  return clamp(
+    maintenance * RISK_WEIGHTS.maintenance + sentiment * RISK_WEIGHTS.sentiment + housekeeping * RISK_WEIGHTS.housekeeping + energyWaste * RISK_WEIGHTS.energyWaste,
+    0,
+    1,
+  );
+}
+
 export function roomLayerValue(layer: LayerId, cell: RoomCell, st: RoomState): number {
   switch (layer) {
+    case "risk":
+      return compositeRisk(st);
     case "maintenance":
       return st.maintRisk;
     case "sentiment":
@@ -59,6 +78,8 @@ export function roomLayerValue(layer: LayerId, cell: RoomCell, st: RoomState): n
 
 export function roomColor(layer: LayerId, cell: RoomCell, st: RoomState, out = new THREE.Color()): THREE.Color {
   switch (layer) {
+    case "risk":
+      return rampColor(ramps.heat, compositeRisk(st), out);
     case "occupancy":
       return out.copy(statusColorCache[st.status]);
     case "maintenance":

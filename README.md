@@ -94,7 +94,7 @@ components/analytics  deep-dive routes
 
 ## Keyboard
 
-`1–7` view modes · `Q W E R Y` layers · `[ ]` floors · `Space` pause · `⌘K` search · `T` tour · `?` help
+`1–7` view modes · `U Q W E R Y` layers (risk · occupancy · maintenance · sentiment · revenue · energy) · `Shift+T` housekeeping layer · `[ ]` floors · `Space` pause · `⌘K` search · `T` tour · `?` help
 
 ## Limitations
 
