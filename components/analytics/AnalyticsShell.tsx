@@ -24,6 +24,7 @@ export const routes = [
   { href: "/inventory", label: "Inventory" },
   { href: "/energy", label: "Energy" },
   { href: "/sentiment", label: "Sentiment" },
+  { href: "/surveillance", label: "Surveillance" },
   { href: "/concierge", label: "Concierge" },
   { href: "/assistant", label: "Assistant" },
   { href: "/integrations", label: "Integrations" },

@@ -45,3 +45,6 @@ next-env.d.ts
 
 # sqlite persistence (runtime data, not source)
 /data/
+
+# surveillance demo video dataset (user-supplied test clips, ~280MB — not project source)
+/public/surveillance/
