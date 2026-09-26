@@ -1,13 +1,11 @@
 import type { RequestType } from "@/lib/sim/types";
 
-/** The literal "gap" the user asked to close: guestexperience (github.com/SDP42/guestexperience,
- * a separate, independently-deployed Next.js app guests use directly — near_home_360 has no
- * staff-facing view into it) has its own request schema (lib/requests.ts's ReqType). Confirmed
- * by reading that repo directly: its submitRequest() only ever writes to its own local SQLite —
- * there is no outbound call anywhere in it today. This adapter is what the receiving side
- * (app/api/guest-app/inbox) needs to translate one of ITS requests into something this sim's
- * own createRequest() already understands, once guestexperience is updated (future scope, per
- * the user's own words) to actually POST here instead of only writing locally. */
+/** guestexperience (github.com/SDP42/guestexperience, a separate, independently-deployed
+ * Next.js app guests use directly) has its own request schema (lib/requests.ts's ReqType).
+ * Its submitRequest() writes to its own local SQLite AND now fires a real, fire-and-forget
+ * POST to this app's /api/guest-app/inbox right after (see notifyAdminBridge in that repo's
+ * lib/requests.ts). This adapter is what the receiving side of that call needs to translate
+ * one of ITS request types into something this sim's own createRequest() already understands. */
 export type GuestAppReqType = "room_service" | "housekeeping" | "maintenance" | "late_checkout" | "sos" | "other";
 
 const TYPE_MAP: Record<GuestAppReqType, RequestType> = {

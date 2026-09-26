@@ -132,7 +132,13 @@ export interface ServiceRequest {
   assignedTo: string | null;
   slaMin: number;
   completedAt: number | null;
-  source: "guest" | "system" | "concierge" | "staff";
+  source: "guest" | "system" | "concierge" | "staff" | "guest-app";
+  /** The guest name as guestexperience itself knows it, carried straight through the bridge
+   * payload — set only for source "guest-app". Kept distinct from guestId's own name lookup
+   * because the two apps run independent seeded guest rosters for the same room numbers (no
+   * shared database), so state.guests[guestId] can point at a different "current occupant"
+   * than the guest who actually placed this order on the guest app. */
+  guestAppGuestName?: string | null;
 }
 
 export type Severity = "info" | "warn" | "critical";

@@ -37,7 +37,7 @@ const ASSET_RISK_CONFIRM_THRESHOLD = 0.3;
  * recovery risk (lib/intelligence/guestRecovery.ts). No new mutable state, no new module id —
  * this is a read across four modules that already exist, not a fifth one. */
 export function detectCausalChains(state: SimState, model: ResortModel): CausalChain[] {
-  const candidates = Object.values(state.requests).filter((r) => r.type === "maintenance" && r.source === "guest" && state.t - r.createdAt < LOOKBACK_MIN);
+  const candidates = Object.values(state.requests).filter((r) => r.type === "maintenance" && (r.source === "guest" || r.source === "guest-app") && state.t - r.createdAt < LOOKBACK_MIN);
 
   const atRiskGuestIds = new Set(assessGuestRisk(state, model).map((g) => g.guestId));
   const chains: CausalChain[] = [];

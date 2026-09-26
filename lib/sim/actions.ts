@@ -297,7 +297,11 @@ export function applyGuestAppOrder(state: SimState, model: ResortModel, roomId: 
   const room = state.rooms[roomId];
   const guestId = room?.guestId ?? null;
   const type = mapGuestAppRequestType(reqType);
-  const req = createRequest(state, model, roomId, type, text, "guest", type === "complaint" ? 15 : 30, guestId);
+  // Tagged "guest-app" (not the pre-existing "guest" source, which the tick engine also uses
+  // for purely-simulated organic guest requests) so the admin-side Guest Requests view can
+  // show exactly, and only, the requests that actually arrived through the real bridge.
+  const req = createRequest(state, model, roomId, type, text, "guest-app", type === "complaint" ? 15 : 30, guestId);
+  req.guestAppGuestName = guestName || null;
   const cell = model.roomById.get(roomId);
   pushFeed(state, "task", `${guestName || "Guest"} via guest app: "${text}"${cell ? ` — ${cell.number}` : ""}`, "room", roomId, type === "complaint" ? "warn" : "info");
   dispatchStaff(state, model, req, type === "complaint" ? "frontdesk" : type === "fnb" ? "fnb" : type === "housekeeping" ? "housekeeping" : type === "maintenance" ? "engineering" : "concierge");

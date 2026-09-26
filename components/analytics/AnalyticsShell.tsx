@@ -27,7 +27,7 @@ export const routes = [
   { href: "/surveillance", label: "Surveillance" },
   { href: "/concierge", label: "Concierge" },
   { href: "/assistant", label: "Assistant" },
-  { href: "/integrations", label: "Integrations" },
+  { href: "/integrations", label: "Guest Requests" },
   { href: "/history", label: "History" },
   { href: "/summary", label: "Summary" },
 ];
