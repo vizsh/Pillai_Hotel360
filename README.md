@@ -1,8 +1,21 @@
 # Smart Resort 360
 
-AI-powered resort operations, guest experience and revenue intelligence — delivered on a **live 3D digital twin** of the property.
+AI-powered resort operations, guest experience, revenue and **CCTV surveillance intelligence** — delivered on a **live 3D digital twin** of the property.
 
-Built for PS ID 4 (Pillai Panvel hackathon). Every signal the resort produces lands on the building: room state, maintenance risk, sentiment, revenue, housekeeping load, energy. Eight intelligence modules turn that data into recommendations with confidence and basis, and accepting a recommendation dispatches it into operations where you can watch the consequence on the model.
+Built for PS ID 4 (Pillai Panvel hackathon). Every signal the resort produces lands on the building: room state, maintenance risk, sentiment, revenue, housekeeping load, energy, and — most recently — real computer vision over live CCTV-style test footage. Twelve intelligence modules turn that data into recommendations with confidence and basis, and accepting a recommendation dispatches it into operations where you can watch the consequence on the model.
+
+## Documentation
+
+This README covers running the project and what's real vs. simulated. For depth on any one part:
+
+| Doc | Covers |
+|---|---|
+| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | System diagrams, data flow, folder map, state/rendering model |
+| [`docs/INTELLIGENCE_MODELS.md`](docs/INTELLIGENCE_MODELS.md) | The actual math behind all 12 modules + 3 composite views |
+| [`docs/SURVEILLANCE.md`](docs/SURVEILLANCE.md) | The CCTV vision layer: real detection, calibrated heuristics, how it was debugged against real footage |
+| [`docs/AUTOMATION_AND_INTEGRATIONS.md`](docs/AUTOMATION_AND_INTEGRATIONS.md) | Autopilot, Automation Scenarios, Telegram bot, guest-app bridge, weather, integration contracts |
+| [`docs/PROBLEMS_AND_SOLUTIONS.md`](docs/PROBLEMS_AND_SOLUTIONS.md) | Real bugs found, root-caused and fixed — the reasoning, not just the diff |
+| [`docs/DIFFERENTIATORS.md`](docs/DIFFERENTIATORS.md) | What to actually check for as a judge, and where it's demonstrated |
 
 ## Run
 
@@ -14,7 +27,7 @@ npm run dev
 Every route requires signing in first (see **Auth** below) — you'll land on `/login`.
 
 - `/command` — the command center (3D twin + panels + recommendation queue + concierge)
-- `/revenue` `/guests` `/operations` `/maintenance` `/inventory` `/sentiment` `/concierge` `/energy` `/assistant` — analytics deep dives
+- `/revenue` `/guests` `/operations` `/maintenance` `/inventory` `/sentiment` `/concierge` `/energy` `/assistant` `/surveillance` `/integrations` `/history` `/summary` — analytics deep dives
 - `npx tsx scripts/smoke.ts` — headless 3-day simulation run, prints KPIs
 
 ### Auth
@@ -88,6 +101,24 @@ Two ways to explore the twin beyond point-and-read:
 
 **Known limitations:** text and button interactions only — voice-note transcription (the blueprint's Marathi voice-note example) isn't implemented, since this session's own measured Ollama latency (30-90s per call on modest hardware) made adding a third heavy model for STT impractical for a demo. WhatsApp is scoped out entirely for the verification reason above.
 
+### CCTV Surveillance Intelligence — "the eyes of the resort"
+
+`/surveillance` — real, in-browser computer vision over real user-supplied test footage (fire/smoke, altercation/distress, parking occupancy), not staged screenshots. Full detail, math and calibration methodology in [`docs/SURVEILLANCE.md`](docs/SURVEILLANCE.md); short version:
+
+- **Parking** uses a real pretrained object detector (COCO-SSD via TensorFlow.js), binned into a zone-occupancy grid with a proper dashboard (stat cards, utilization bar, lettered zones, car icons) — not a bare number table.
+- **Fire and altercation** have no off-the-shelf pretrained classifier, so they read real, documented visual/motion signatures directly off the pixels — warm-hue + white-hot-core coverage and frame-to-frame flicker for fire; person-detection box overlap + motion + bounding-box aspect ratio for altercation/distress — with every threshold calibrated by extracting real frames via `ffmpeg` and measuring actual pixel values, not guessed.
+- Every detector runs through the same **persistence gate** (a signal must sustain across 4 of the last 6 samples) that this project's other anomaly-driven modules already use — the standard defense against a single noisy frame becoming a false alarm.
+- A confirmed event posts a **real alert** through the same `addAlert()`/`state.alerts` every other module uses — it shows up in the same BottomDock feed as a maintenance or sentiment alert, not a separate silo.
+- Video loops continuously with a Stop button and a 1×/2×/3× playback-speed control (`HTMLVideoElement.playbackRate`) for reviewing longer clips quickly.
+
+### Automation Scenarios — a curated, narrated "watch it decide" demo
+
+Distinct from the blanket Autopilot toggle below: `Automation scenarios` in the left rail opens a catalog of 15 real scenarios, one per intelligence module (plus live concierge chat and the guest-app bridge). Pick one, read a brief (situation/detection/reasoning), and watch it run — narrated step by step (detect → decide → dispatch → real staff walk with a live progress bar → resolved), not jump-cut from start to done. See [`docs/AUTOMATION_AND_INTEGRATIONS.md`](docs/AUTOMATION_AND_INTEGRATIONS.md).
+
+### Guest-app bridge + registration QR
+
+The guest-facing companion app (a separate deployment, [`SDP42/guestexperience`](https://github.com/SDP42/guestexperience)) has no shared database with this one. `app/api/guest-app/inbox` is a real HTTP bridge (same architecture as the Telegram bot: queue table + polling hook + real action functions) that receives and dispatches guest-originated orders — verified live end-to-end. The Guests page can generate a real, scannable registration QR using an actual `(room, stay_id, guest)` triple pulled from guestexperience's own public seed data, so a demo scan resolves to genuine data. Full detail, including the honest limits of what's connected today, in [`docs/AUTOMATION_AND_INTEGRATIONS.md`](docs/AUTOMATION_AND_INTEGRATIONS.md).
+
 ## What is real and what is simulated
 
 **Everything numeric is synthetic** — except one signal, deliberately. A seeded engine (`lib/sim`) generates the property, guests, staff, telemetry, requests, reviews and revenue. Same seed, same run. The UI tags values as `SIMULATED` (raw sim state), `MODELED` (output of an intelligence module) or `DERIVED` (aggregation). No real property or guest data is used or implied.
@@ -109,19 +140,35 @@ The *models* are real implementations, not stubs:
 | AI concierge (conversational layer, opt-in) | Retrieval-augmented generation over a real knowledge base (cosine similarity, `nomic-embed-text` embeddings) grounds a local Ollama model (`llama3.1:8b`); a deterministic guardrail filter blocks refund/discount/compensation language after generation, before it reaches the guest | `lib/ai/*`, `app/api/concierge/route.ts` |
 | Ops assistant (opt-in) | Function-calling loop against a local Ollama model — 4 tools (`find_room`, `list_open_issues`, `list_guests`, `get_resort_summary`) query a fresh per-request snapshot of the live sim, role- and consent-masked identically to the Guests page; replies are Markdown, rendered by a small dependency-free renderer scoped to what the system prompt actually asks the model to produce | `lib/ai/tools.ts`, `lib/ai/opsSnapshot.ts`, `app/api/ops-assistant/route.ts`, `components/ui/Markdown.tsx` |
 | Telegram frontline bot (opt-in) | Standalone long-polling process bridged to the browser-only sim via a SQLite read model + write queue; free-text issue reports route through the same keyword classifier as the guest concierge | `scripts/telegramBot.ts`, `lib/telegram/*`, `hooks/useTelegramInbox.ts`, `app/api/telegram/inbox/route.ts` |
+| Guest-app bridge | Real HTTP inbox + adapter translating a separate guest-facing app's own request schema onto this project's `RequestType`, drained by a browser hook into the same dispatch functions | `app/api/guest-app/inbox`, `lib/integration/guestAppAdapter.ts`, `hooks/useGuestAppInbox.ts` |
+| CCTV surveillance (fire/altercation) | Calibrated pixel-color + frame-flicker heuristic (fire) and person-detection box-overlap/motion/aspect-ratio heuristic (altercation) — no off-the-shelf classifier exists for either, so both read real, documented signatures directly off the pixels, persistence-gated | `lib/vision/fireHeuristic.ts`, `lib/vision/altercationHeuristic.ts`, `lib/vision/persistence.ts` |
+| CCTV surveillance (parking) | Real pretrained object detection (COCO-SSD/TensorFlow.js), confidence floor corrected for overhead camera angle, binned into a zone-occupancy grid | `lib/vision/coco.ts`, `lib/vision/parkingGrid.ts` |
+| Causal chain (composite view) | Reconstructs complaint → diagnosis → work order → relocation → recovery as one timeline, purely by reading four already-running modules — no new mutable state | `lib/intelligence/causalChain.ts` |
+| Demand spine (composite view) | Seasonal-naive 14-day occupancy/ADR forecast blending real observed history toward a scenario baseline while history is thin | `lib/intelligence/demandSpine.ts` |
+| Guest Experience Index (composite view) | One composite 0-1 score per guest — 40% sentiment / 25% SLA hit-rate / 20% segment-relative engagement / 15% loyalty | `lib/intelligence/guestExperience.ts` |
+
+Full derivations and formulas for every module above: [`docs/INTELLIGENCE_MODELS.md`](docs/INTELLIGENCE_MODELS.md). System diagrams and data flow: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 ## Architecture
 
 ```
 lib/architecture   parametric resort generator (config → rooms, zones, assets, nav graph)
-lib/sim            entity types, seeded population, tick engine, A* pathfinding, actions
-lib/intelligence   the eight modules + registry
+lib/sim            entity types, seeded population, tick engine, A* pathfinding, actions,
+                    scenarioCatalog.ts (Automation Scenarios)
+lib/intelligence   the twelve modules + registry + 3 composite views (causal chain,
+                    demand spine, guest experience index)
+lib/vision         CCTV surveillance layer: real object detection + calibrated
+                    fire/altercation heuristics + the shared persistence gate
+lib/integration    the guest-app bridge adapter + real seed-data mapping for the QR feature
+lib/adapters       PMS/BMS/camera-analytics payload contracts (Integrations page)
 lib/twin           layer colour maps, merged geometry builders, materials
-store              zustand: sim (transient), twin view state, quality tier, ui
+store              zustand: sim (transient), twin view state, quality tier, ui, director
 components/twin    R3F scene: floors, facade, room plates, furniture, site, staff agents, markers
-components/command command center shell and context panels
-components/analytics  deep-dive routes
+components/command command center shell, BottomDock, AutomationScenariosPanel, context panels
+components/analytics  deep-dive routes, including Surveillance, Integrations, GuestPhoneMock
 ```
+
+See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the full system diagram and data-flow model.
 
 **Geometry is procedural.** No model files. `defaultConfig` in `lib/architecture/config.ts` sets floors, rooms per side, room dimensions, roof and site — change it and the twin regenerates. Walls are merged per floor, furniture and room plates are instanced, so the whole resort renders in roughly 90 draw calls.
 
@@ -166,3 +213,15 @@ covering every module's recommendations beats several partially-consistent ones.
 - Voice input/output uses the browser's own Web Speech API, not a local speech model — real STT/TTS quality and language coverage (English/Hindi/Marathi) depend entirely on the browser and OS, and it is unavailable outside Chromium-based browsers.
 - Failure probabilities are calibrated to look plausible, not to any real asset population.
 - The Telegram bot is text/button-only (no voice-note transcription) and requires the dashboard open in a browser tab somewhere to actually apply its queued actions — it's a remote control for the live sim, not an independent backend. WhatsApp support was scoped out; see the setup section above for why.
+- The CCTV surveillance layer's fire/altercation detectors are calibrated heuristics (real pixel color/flicker and person-detection motion/geometry signals), not trained classifiers — there is no labeled dataset or training pipeline in this project to build one. They were calibrated against the specific test footage supplied; genuinely different lighting or camera conditions would likely need the same measure-then-calibrate process repeated, not a guaranteed generalization. See [`docs/SURVEILLANCE.md`](docs/SURVEILLANCE.md).
+- The guestexperience guest-app bridge is real and verified end-to-end from this app's side, but the guest app itself does not call it yet — this is stated future work, not an implied existing connection.
+- Parking occupancy uses a coarse zone grid, not per-slot calibrated polygons — a legitimate next step for a specific camera, not done here for the provided test clips.
+
+## Further reading
+
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — system diagrams, data flow, folder map
+- [`docs/INTELLIGENCE_MODELS.md`](docs/INTELLIGENCE_MODELS.md) — the math behind every module
+- [`docs/SURVEILLANCE.md`](docs/SURVEILLANCE.md) — the CCTV vision layer in depth
+- [`docs/AUTOMATION_AND_INTEGRATIONS.md`](docs/AUTOMATION_AND_INTEGRATIONS.md) — Autopilot, Scenarios, bridges, weather, adapters
+- [`docs/PROBLEMS_AND_SOLUTIONS.md`](docs/PROBLEMS_AND_SOLUTIONS.md) — real bugs, root causes, fixes
+- [`docs/DIFFERENTIATORS.md`](docs/DIFFERENTIATORS.md) — what to check for as a judge
