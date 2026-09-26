@@ -20,7 +20,11 @@ const snapshot: OpsSnapshot = {
     { id: "r-2", room: "512", type: "housekeeping", text: "towels", status: "assigned", ageMinutes: 5, slaMin: 20, slaBreached: false, assignedTo: "Priya" },
   ],
   openAlerts: [{ severity: "critical", kind: "asset-risk", title: "AHU-03 failure risk", body: "78%", ageMinutes: 10 }],
-  pendingRecommendations: [{ module: "pricing", title: "Raise weekend rate", confidence: 0.8, impact: "+₹58,000" }],
+  pendingRecommendations: [
+    { module: "pricing", title: "Raise weekend rate", confidence: 0.8, impact: "+₹58,000", targetKind: "resort", targetId: "pricing" },
+    { module: "personalization", title: "Asha Rao · 204: Offer spa upgrade", confidence: 0.85, impact: "+₹4,500", targetKind: "guest", targetId: "g-1" },
+    { module: "personalization", title: "Raj Mehta · 512: Late checkout offer", confidence: 0.7, impact: "+₹0", targetKind: "guest", targetId: "g-2" },
+  ],
 };
 
 describe("executeTool: find_room", () => {
@@ -78,11 +82,63 @@ describe("executeTool: list_guests", () => {
   });
 });
 
+describe("executeTool: list_planned_actions", () => {
+  it("lists every pending recommendation by default", () => {
+    const result = executeTool({ name: "list_planned_actions", arguments: {} }, snapshot) as { count: number };
+    expect(result.count).toBe(3);
+  });
+
+  it("filters to actions planned for VIP guests only", () => {
+    const result = executeTool({ name: "list_planned_actions", arguments: { vipOnly: true } }, snapshot) as { count: number; actions: { title: string }[] };
+    expect(result.count).toBe(1);
+    expect(result.actions[0].title).toContain("Asha Rao");
+  });
+
+  it("filters to actions planned for a named guest", () => {
+    const result = executeTool({ name: "list_planned_actions", arguments: { guestName: "raj" } }, snapshot) as { count: number; actions: { title: string }[] };
+    expect(result.count).toBe(1);
+    expect(result.actions[0].title).toContain("Raj Mehta");
+  });
+
+  it("excludes resort-wide (non-guest) actions when filtering by vipOnly", () => {
+    const result = executeTool({ name: "list_planned_actions", arguments: { vipOnly: true } }, snapshot) as { actions: { module: string }[] };
+    expect(result.actions.every((a) => a.module !== "pricing")).toBe(true);
+  });
+});
+
 describe("executeTool: get_resort_summary", () => {
-  it("surfaces the snapshot's KPIs and counts", () => {
-    const result = executeTool({ name: "get_resort_summary", arguments: {} }, snapshot) as { occupancy: number; openRequests: number };
-    expect(result.occupancy).toBe(0.8);
+  it("surfaces the snapshot's KPIs (occupancy as a whole-number percentage) and counts", () => {
+    const result = executeTool({ name: "get_resort_summary", arguments: {} }, snapshot) as { occupancyPercent: number; openRequests: number };
+    expect(result.occupancyPercent).toBe(80);
     expect(result.openRequests).toBe(2);
+  });
+});
+
+describe("executeTool: numbers are rounded to something a chat table should actually show", () => {
+  // Verified live this was a real, shipped bug: the model faithfully copied a raw
+  // 0.8233020963248183-style confidence straight into a Markdown table cell because nothing
+  // upstream had ever rounded it. These lock in the fix at its source (the tool boundary),
+  // not just at the prompt-instruction layer.
+  const messySnapshot: OpsSnapshot = {
+    ...snapshot,
+    guests: [{ id: "g-1", name: "Asha Rao", room: "204", segment: "luxury", loyalty: "platinum", vip: true, sentiment: -0.400000001234, totalSpend: 45000 }],
+    rooms: [{ number: "204", floor: 2, status: "occupied", guestName: "Asha Rao", guestId: "g-1", maintRisk: 0.8233020963248183 }],
+    pendingRecommendations: [{ module: "pricing", title: "Raise weekend rate", confidence: 0.8233020963248183, impact: "+₹58,000", targetKind: "resort", targetId: "pricing" }],
+  };
+
+  it("rounds a room's maintenance risk to a whole-number percentage", () => {
+    const result = executeTool({ name: "find_room", arguments: { query: "204" } }, messySnapshot) as { matches: { maintenanceRiskPercent: number }[] };
+    expect(result.matches[0].maintenanceRiskPercent).toBe(82);
+  });
+
+  it("rounds a guest's sentiment to 2 decimal places", () => {
+    const result = executeTool({ name: "list_guests", arguments: {} }, messySnapshot) as { guests: { sentiment: number }[] };
+    expect(result.guests[0].sentiment).toBe(-0.4);
+  });
+
+  it("rounds a planned action's confidence to a whole-number percentage", () => {
+    const result = executeTool({ name: "list_planned_actions", arguments: {} }, messySnapshot) as { actions: { confidencePercent: number }[] };
+    expect(result.actions[0].confidencePercent).toBe(82);
   });
 });
 

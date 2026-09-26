@@ -8,13 +8,23 @@ describe("buildOpsSystemPrompt", () => {
     expect(prompt.toLowerCase()).toContain("never invent");
   });
 
-  it("stays silent on language instruction for English, but adds one for Hindi/Marathi", () => {
+  it("gives an explicit language instruction for every language, including English", () => {
+    // Verified live: without an explicit instruction for English too, the model kept
+    // replying in Hindi to a plain English question once the conversation history
+    // contained an earlier Hindi exchange — silence on English was the actual bug.
     const en = buildOpsSystemPrompt("en", "gm");
     const hi = buildOpsSystemPrompt("hi", "gm");
     const mr = buildOpsSystemPrompt("mr", "gm");
-    expect(en.toLowerCase()).not.toContain("respond in");
+    expect(en.toLowerCase()).toContain("respond in english");
     expect(hi.toLowerCase()).toContain("respond in");
     expect(mr.toLowerCase()).toContain("respond in");
+  });
+
+  it("every language instruction says explicitly that earlier messages don't decide the reply language", () => {
+    for (const lang of ["en", "hi", "mr"] as const) {
+      const prompt = buildOpsSystemPrompt(lang, "gm");
+      expect(prompt.toLowerCase()).toContain("regardless of what language earlier messages");
+    }
   });
 
   it("always forbids refund/compensation/discount language regardless of role or language", () => {

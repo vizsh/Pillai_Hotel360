@@ -75,9 +75,28 @@ describe("resolveTwinQuery", () => {
 
   it("caption always names how many rooms matched", () => {
     const { state, model } = makeState();
-    const res = resolveTwinQuery("vacant and dirty rooms", state, model);
+    const res = resolveTwinQuery("show me vacant and dirty rooms", state, model);
     expect(res).not.toBeNull();
     expect(res!.caption).toMatch(/^\d+ rooms?/);
+  });
+
+  it("does NOT hijack an indirect question that merely mentions a topic word, in English", () => {
+    const { state, model } = makeState();
+    expect(resolveTwinQuery("what have we planned for the vip guests", state, model)).toBeNull();
+    expect(resolveTwinQuery("why is guest satisfaction down", state, model)).toBeNull();
+    expect(resolveTwinQuery("what's the biggest problem right now", state, model)).toBeNull();
+  });
+
+  it("does NOT hijack a real question about a specific room without a listing verb (find_room's job)", () => {
+    const { state, model } = makeState();
+    const anyRoom = model.rooms[0];
+    expect(resolveTwinQuery(`who is staying in room ${anyRoom.number}`, state, model)).toBeNull();
+  });
+
+  it("still matches distinctive multi-word phrases (SLA, need attention) without requiring a listing verb", () => {
+    const { state, model } = makeState();
+    expect(resolveTwinQuery("any sla breaches open", state, model)).not.toBeNull();
+    expect(resolveTwinQuery("what problems need attention right now", state, model)).not.toBeNull();
   });
 });
 

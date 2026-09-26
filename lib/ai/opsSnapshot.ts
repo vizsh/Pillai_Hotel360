@@ -50,6 +50,12 @@ export interface OpsRecommendation {
   title: string;
   confidence: number;
   impact: string;
+  /** Carried through so a tool can answer "what's planned for guest X" or "for our VIPs"
+   * precisely (lib/ai/tools.ts's list_planned_actions) — matching on the title's own text
+   * (e.g. "Chloe Kapoor · 303: ...") would be fragile; this is the same targetKind/targetId
+   * the recommendation itself already carries. */
+  targetKind: string;
+  targetId: string;
 }
 
 export interface OpsSnapshot {
@@ -114,7 +120,7 @@ export function buildOpsSnapshot(state: SimState, model: ResortModel, role: Role
 
   const pendingRecommendations: OpsRecommendation[] = Object.values(state.recommendations)
     .filter((r) => r.status === "pending")
-    .map((r) => ({ module: r.module, title: r.title, confidence: r.confidence, impact: r.impact }));
+    .map((r) => ({ module: r.module, title: r.title, confidence: r.confidence, impact: r.impact, targetKind: r.targetKind, targetId: r.targetId }));
 
   return {
     asOfSimTime: `day ${Math.floor(state.t / 1440)}, ${String(Math.floor((state.t % 1440) / 60)).padStart(2, "0")}:${String(Math.floor(state.t % 60)).padStart(2, "0")}`,

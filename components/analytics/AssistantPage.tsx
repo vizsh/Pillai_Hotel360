@@ -30,7 +30,50 @@ interface AssistantMessage {
   twinAction?: boolean;
 }
 
-const suggestions = ["Who is staying in room 204?", "What problems need attention right now?", "List our VIP guests", "How is the resort doing today?", "Which guests seem unhappy?", "Any SLA breaches open?"];
+const suggestions = ["Who is staying in room 204?", "What problems need attention right now?", "List our VIP guests", "How is the resort doing today?", "Which guests seem unhappy?", "Any SLA breaches open?", "What have we planned for our VIP guests?"];
+
+/** Strips the Markdown this assistant's own replies are instructed to produce (tables,
+ * bullets, bold, headers) so speech doesn't read out pipe characters and asterisks — a plain
+ * `.replace(/[|*#-]/g, "")` (the previous version) left table row separators and bullet
+ * glyphs behind and collapsed multi-line replies into one run-on sentence. */
+function stripMarkdownForSpeech(text: string): string {
+  return text
+    .replace(/\|/g, " ")
+    .replace(/^[-*#>]+\s*/gm, "")
+    .replace(/\*\*(.*?)\*\*/g, "$1")
+    .replace(/[*_`]/g, "")
+    .replace(/^\s*[-—]+\s*$/gm, "")
+    .replace(/\n{2,}/g, ". ")
+    .replace(/\n/g, ", ")
+    .trim();
+}
+
+let cachedVoices: SpeechSynthesisVoice[] = [];
+if (typeof window !== "undefined" && "speechSynthesis" in window) {
+  const load = () => {
+    cachedVoices = window.speechSynthesis.getVoices();
+  };
+  load();
+  window.speechSynthesis.onvoiceschanged = load;
+}
+
+/** Picks the closest real voice for the selected language rather than only setting
+ * `utterance.lang` and hoping the browser's default voice happens to match — on Chrome/Edge a
+ * mismatched default voice will often just read Hindi/Marathi text with an English voice and
+ * pronunciation. Falls back to language-tag-only (the old behaviour) when no matching voice is
+ * installed, which is still correct, just not guaranteed to sound native. */
+function speak(text: string, language: AssistantLanguage) {
+  if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
+  const utter = new SpeechSynthesisUtterance(stripMarkdownForSpeech(text));
+  const tag = LANGUAGE_SPEECH_TAG[language];
+  utter.lang = tag;
+  const prefix = tag.split("-")[0];
+  const voices = cachedVoices.length ? cachedVoices : window.speechSynthesis.getVoices();
+  const voice = voices.find((v) => v.lang === tag) ?? voices.find((v) => v.lang.startsWith(prefix));
+  if (voice) utter.voice = voice;
+  window.speechSynthesis.cancel();
+  window.speechSynthesis.speak(utter);
+}
 
 // Minimal ambient types for the Web Speech API — not in TS's DOM lib by default, and this
 // stays entirely optional/feature-detected (`window.webkitSpeechRecognition`), never a hard
@@ -99,8 +142,12 @@ export function AssistantPage() {
     // deterministically (lib/twin/queries.ts), not by the LLM, for the same reason task
     // dispatch is deterministic: a hallucinated room list driving the camera would be worse
     // than useless. Matched instantly, no Ollama round-trip, and the exact same matcher the
-    // Ctrl+K palette uses (Overlays.tsx), so the two behave identically.
-    const twinMatch = resolveTwinQuery(trimmed, state, model);
+    // Ctrl+K palette uses (Overlays.tsx), so the two behave identically. English only — the
+    // patterns are English phrases, and a Hindi/Marathi question that merely mentions the same
+    // topic word (verified live: "vip guest kitne hai" matched a bare English "vip" pattern
+    // and got hijacked into an English camera caption instead of ever reaching the LLM, which
+    // already replies correctly in the selected language) must never be pattern-matched at all.
+    const twinMatch = language === "en" ? resolveTwinQuery(trimmed, state, model) : null;
     if (twinMatch) {
       useTwin.getState().ask(twinMatch.rooms, twinMatch.caption);
       setMessages((m) => [...m, { id: `a-${++msgIdRef.current}`, role: "assistant", content: twinMatch.caption, twinAction: true }]);
@@ -119,11 +166,7 @@ export function AssistantPage() {
       .then((data: { ok: boolean; reply?: string; toolsUsed?: string[]; guardrailTripped?: boolean }) => {
         if (data.ok && data.reply) {
           setMessages((m) => [...m, { id: `a-${++msgIdRef.current}`, role: "assistant", content: data.reply!, toolsUsed: data.toolsUsed, guardrailTripped: data.guardrailTripped }]);
-          if (speakReplies && typeof window !== "undefined" && "speechSynthesis" in window) {
-            const utter = new SpeechSynthesisUtterance(data.reply!.replace(/[|*#-]/g, ""));
-            utter.lang = LANGUAGE_SPEECH_TAG[language];
-            window.speechSynthesis.speak(utter);
-          }
+          if (speakReplies) speak(data.reply!, language);
         }
       })
       .catch(() => {})
@@ -194,36 +237,39 @@ export function AssistantPage() {
         </p>
       </Card>
 
-      <Card className="flex h-[560px] flex-col p-0">
-        <div ref={scroller} className="scrollbar-thin flex-1 space-y-3 overflow-y-auto px-4 py-3">
+      <Card className="flex h-[640px] flex-col overflow-hidden p-0">
+        <div ref={scroller} className="scrollbar-thin flex-1 space-y-2 overflow-y-auto px-4 py-3">
           {messages.length === 0 && (
             <div className="rounded-lg bg-white/[0.03] p-3 text-[11.5px] leading-relaxed text-mid">Ask about any room, guest, open issue, or the resort&apos;s overall numbers — the assistant calls real tools against the live simulation to answer, not a fixed script.</div>
           )}
-          {messages.map((m) => (
-            <div key={m.id} className={cn("flex flex-col", m.role === "user" ? "items-end" : "items-start")}>
-              <div
-                className={cn(
-                  "max-w-[90%] rounded-xl px-3 py-2 text-[12.5px]",
-                  m.role === "user" ? "rounded-br-sm bg-accent/20 text-hi" : m.twinAction ? "rounded-bl-sm border border-[#c084fc]/40 bg-[#c084fc]/[0.06] text-hi" : "rounded-bl-sm border border-accent/30 bg-accent/[0.05] text-mid",
-                )}
-              >
-                {m.role === "assistant" ? <Markdown text={m.content} className="flex flex-col gap-1" /> : m.content}
-              </div>
-              {m.twinAction && (
-                <Link href="/command" className="mono mt-0.5 flex items-center gap-1 text-[10px] text-[#c084fc] hover:underline">
-                  <Sparkles size={9} /> View framed on the twin →
-                </Link>
-              )}
-              {m.toolsUsed && m.toolsUsed.length > 0 && (
-                <div className="mono mt-0.5 flex items-center gap-1 text-[10px] text-accent/80">
-                  <Sparkles size={9} /> used: {m.toolsUsed.join(", ")}
+          {messages.map((m, i) => {
+            const prevSameRole = i > 0 && messages[i - 1].role === m.role;
+            return (
+              <div key={m.id} className={cn("flex flex-col", m.role === "user" ? "items-end" : "items-start", prevSameRole ? "mt-1" : "mt-3 first:mt-0")}>
+                <div
+                  className={cn(
+                    "max-w-[92%] rounded-xl px-3 py-2 text-[12.5px] leading-relaxed",
+                    m.role === "user" ? "rounded-br-sm bg-accent/20 text-hi" : m.twinAction ? "rounded-bl-sm border border-[#c084fc]/40 bg-[#c084fc]/[0.06] text-hi" : "rounded-bl-sm border border-accent/30 bg-accent/[0.05] text-mid",
+                  )}
+                >
+                  {m.role === "assistant" ? <Markdown text={m.content} className="flex flex-col gap-1.5 [&_td]:align-top" /> : m.content}
                 </div>
-              )}
-              {m.guardrailTripped && <div className="mt-0.5 text-[10px] text-warm">guardrail: reply replaced (compensation/discount language)</div>}
-            </div>
-          ))}
+                {m.twinAction && (
+                  <Link href="/command" className="mono mt-1 flex items-center gap-1 text-[10px] text-[#c084fc] hover:underline">
+                    <Sparkles size={9} /> View framed on the twin →
+                  </Link>
+                )}
+                {m.toolsUsed && m.toolsUsed.length > 0 && (
+                  <div className="mono mt-1 flex items-center gap-1 text-[10px] text-accent/80">
+                    <Sparkles size={9} /> used: {m.toolsUsed.join(", ")}
+                  </div>
+                )}
+                {m.guardrailTripped && <div className="mt-1 text-[10px] text-warm">guardrail: reply replaced (compensation/discount language)</div>}
+              </div>
+            );
+          })}
           {thinking && (
-            <div className="flex flex-col items-start">
+            <div className="mt-3 flex flex-col items-start">
               <div className="rounded-xl rounded-bl-sm border border-accent/30 bg-accent/[0.06] px-3 py-2 text-[11.5px] text-low">
                 <Sparkles size={11} className="mr-1 inline animate-pulse text-accent" /> thinking… local inference, can take up to a minute
               </div>

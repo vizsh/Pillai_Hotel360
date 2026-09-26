@@ -18,8 +18,22 @@ export interface TwinQueryResult {
  * tonight" behaves identically whether it's typed or asked. Returns null when nothing in the
  * text matches a known pattern — the caller falls back to its own normal behaviour (palette:
  * plain entity search; assistant: the LLM tool-calling path). */
+/** A message reading "show me the rooms at risk" is a camera command; a message reading
+ * "what have we planned for the vip guests" or "why is guest satisfaction down" merely
+ * *mentions* a topic this file also knows how to render a room list for. Confusing the two
+ * was a real, shipped bug — verified live: "what have we planned for the vip guests" and two
+ * Hindi follow-ups ("vip guest kitne hai", "vip guests ka naam kya hai") all got hijacked by a
+ * bare `/\bvip\b/` match into the same wrong "N rooms hold a VIP guest" camera caption,
+ * in English, regardless of the question actually asked or the language selected — instead of
+ * ever reaching the LLM that could have answered any of them properly. A bare topic keyword
+ * is only trusted here when the message also carries an explicit listing/showing verb; a
+ * handful of already-distinctive multi-word phrases (their exact wording appears nowhere
+ * outside this one intent, e.g. "need attention", "sla breach") are trusted alone. */
+const LISTING_INTENT = /\b(which|list|show|highlight|frame|point|display|pull up|give me)\b/;
+
 export function resolveTwinQuery(text: string, state: SimState, model: ResortModel): TwinQueryResult | null {
   const q = text.toLowerCase();
+  const asksToList = LISTING_INTENT.test(q);
 
   const roomNumber = (id: string) => model.roomById.get(id)?.number ?? id;
   const cap = (ids: string[], noun: string, extra?: string) => {
@@ -29,7 +43,7 @@ export function resolveTwinQuery(text: string, state: SimState, model: ResortMod
     return `${ids.length} room${ids.length === 1 ? "" : "s"} ${noun}${ids.length ? `: ${list}${more}` : ""}${extra ? ` — ${extra}` : ""}`;
   };
 
-  if (/\bvip\b/.test(q)) {
+  if (asksToList && /\bvips?\b/.test(q)) {
     const ids = model.rooms.filter((r) => {
       const g = state.rooms[r.id]?.guestId;
       return g && state.guests[g]?.vip;
@@ -37,7 +51,7 @@ export function resolveTwinQuery(text: string, state: SimState, model: ResortMod
     return { rooms: ids, caption: cap(ids, "hold a VIP guest") };
   }
 
-  if (/unhapp|upset|angry|complain|sentiment|dissatisf/.test(q)) {
+  if (asksToList && /unhapp|upset|angry|complain|dissatisf/.test(q)) {
     const ids = model.rooms
       .filter((r) => {
         const g = state.rooms[r.id]?.guestId;
@@ -48,19 +62,19 @@ export function resolveTwinQuery(text: string, state: SimState, model: ResortMod
     return { rooms: ids, caption: cap(ids, "have an unhappy in-house guest right now") };
   }
 
-  if (/sla|breach|overdue|late\b/.test(q)) {
+  if (/sla breach|breaches? open|\boverdue\b/.test(q)) {
     const ids = Object.values(state.requests)
       .filter((r) => r.status !== "done" && state.t - r.createdAt > r.slaMin)
       .map((r) => r.roomId);
     return { rooms: ids, caption: cap(ids, "have an SLA breach open") };
   }
 
-  if (/dirty|awaiting.?clean|housekeeping.?(queue|backlog)/.test(q)) {
+  if (asksToList && /dirty|awaiting.?clean|housekeeping.?(queue|backlog)/.test(q)) {
     const ids = model.rooms.filter((r) => state.rooms[r.id]?.status === "vacant-dirty").map((r) => r.id);
     return { rooms: ids, caption: cap(ids, "are vacant and awaiting housekeeping") };
   }
 
-  if (/maintenance|failing|failure|breakdown/.test(q)) {
+  if (asksToList && /maintenance|failing|failure|breakdown/.test(q)) {
     const ids = model.rooms
       .map((r) => ({ id: r.id, risk: state.rooms[r.id]?.maintRisk ?? 0 }))
       .filter((r) => r.risk > 0.35)
@@ -70,7 +84,7 @@ export function resolveTwinQuery(text: string, state: SimState, model: ResortMod
     return { rooms: ids, caption: cap(ids, "sit on equipment with elevated failure risk") };
   }
 
-  if (/\brisk\b|need attention|at risk|problem/.test(q)) {
+  if (/need attention|at risk tonight|rooms? at risk/.test(q) || (asksToList && /\brisk\b/.test(q))) {
     const ids = model.rooms
       .map((r) => ({ id: r.id, risk: compositeRisk(state.rooms[r.id]) }))
       .filter((r) => r.risk > 0.45)
@@ -80,10 +94,16 @@ export function resolveTwinQuery(text: string, state: SimState, model: ResortMod
     return { rooms: ids, caption: cap(ids, "need attention", "composite of maintenance, sentiment, housekeeping and energy risk") };
   }
 
-  const roomMatch = q.match(/\b(\d{2,4})\b/);
-  if (roomMatch) {
-    const r = model.rooms.find((x) => x.number === roomMatch[1]);
-    if (r) return { rooms: [r.id], caption: `Room ${r.number}` };
+  // A specific room number, gated on listing intent too — "show me room 204" is a camera
+  // command, but "who is staying in room 204" or "call room 204 about the noise complaint"
+  // are real questions the LLM's find_room tool answers properly (with the actual guest name),
+  // and must never be swallowed into a bare, contentless "Room 204" caption instead.
+  if (asksToList) {
+    const roomMatch = q.match(/\b(\d{2,4})\b/);
+    if (roomMatch) {
+      const r = model.rooms.find((x) => x.number === roomMatch[1]);
+      if (r) return { rooms: [r.id], caption: `Room ${r.number}` };
+    }
   }
 
   return null;
