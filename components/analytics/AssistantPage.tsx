@@ -8,6 +8,7 @@ import { useSession } from "@/store/session";
 import { useTwin } from "@/store/twin";
 import { getModel } from "@/lib/architecture/model";
 import { buildOpsSnapshot } from "@/lib/ai/opsSnapshot";
+import { runWeatherWhatIf } from "@/lib/intelligence/weatherWhatIf";
 import { resolveTwinQuery } from "@/lib/twin/queries";
 import { LANGUAGE_LABELS, LANGUAGE_SPEECH_TAG, type AssistantLanguage } from "@/lib/ai/opsAssistantPrompt";
 import { ROLES } from "@/lib/rbac";
@@ -30,7 +31,18 @@ interface AssistantMessage {
   twinAction?: boolean;
 }
 
-const suggestions = ["Who is staying in room 204?", "What problems need attention right now?", "List our VIP guests", "How is the resort doing today?", "Which guests seem unhappy?", "Any SLA breaches open?", "What have we planned for our VIP guests?"];
+const suggestions = [
+  "How is the resort doing today?",
+  "What problems need attention right now?",
+  "List our VIP guests",
+  "Will the weather hurt us this week, and by how much?",
+  "If heavy rain cuts pool-deck demand by 55%, what happens to F&B revenue?",
+  "Which equipment is most likely to fail and what does waiting cost us?",
+  "Is anything dangerous happening in the region right now?",
+  "How much commission did we save by direct bookings?",
+  "Which APIs does this system use and why?",
+  "How does the CCTV fire detection avoid false alarms?",
+];
 
 /** Strips the Markdown this assistant's own replies are instructed to produce (tables,
  * bullets, bold, headers) so speech doesn't read out pipe characters and asterisks — a plain
@@ -147,7 +159,8 @@ export function AssistantPage() {
     // topic word (verified live: "vip guest kitne hai" matched a bare English "vip" pattern
     // and got hijacked into an English camera caption instead of ever reaching the LLM, which
     // already replies correctly in the selected language) must never be pattern-matched at all.
-    const twinMatch = language === "en" ? resolveTwinQuery(trimmed, state, model) : null;
+    const analytical = /\d|%|₹|revenue|math|suppose|what.?if|why|how much|how many|cost|explain|formula/i.test(trimmed);
+    const twinMatch = language === "en" && !analytical ? resolveTwinQuery(trimmed, state, model) : null;
     if (twinMatch) {
       useTwin.getState().ask(twinMatch.rooms, twinMatch.caption);
       setMessages((m) => [...m, { id: `a-${++msgIdRef.current}`, role: "assistant", content: twinMatch.caption, twinAction: true }]);
@@ -156,6 +169,16 @@ export function AssistantPage() {
 
     setThinking(true);
     const snapshot = buildOpsSnapshot(state, model, role);
+    if (/weather|rain|storm|monsoon|heat|cyclone|flood|forecast|what.?if|prepare|pool|outdoor/i.test(trimmed)) {
+      try {
+        snapshot.weatherWhatIf = {
+          rain: runWeatherWhatIf(state, model, { condition: "rain", tempC: 28, rainProbability: 0.9 }),
+          heatwave: runWeatherWhatIf(state, model, { condition: "heatwave", tempC: 38, rainProbability: 0.05 }),
+        };
+      } catch {
+        // what-if is an enrichment; the assistant still answers from the forecast and knowledge tools
+      }
+    }
 
     fetch("/api/ops-assistant", {
       method: "POST",

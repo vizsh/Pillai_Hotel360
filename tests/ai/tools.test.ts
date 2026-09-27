@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { executeTool } from "@/lib/ai/tools";
+import { executeTool, safeCalculate, suggestTools, ungroundedFigures, precomputeUserMath } from "@/lib/ai/tools";
+import { composeAnswer } from "@/lib/ai/composers";
+import { searchKnowledge } from "@/lib/ai/systemKnowledge";
 import type { OpsSnapshot } from "@/lib/ai/opsSnapshot";
 
 const snapshot: OpsSnapshot = {
@@ -20,6 +22,10 @@ const snapshot: OpsSnapshot = {
     { id: "r-2", room: "512", type: "housekeeping", text: "towels", status: "assigned", ageMinutes: 5, slaMin: 20, slaBreached: false, assignedTo: "Priya" },
   ],
   openAlerts: [{ severity: "critical", kind: "asset-risk", title: "AHU-03 failure risk", body: "78%", ageMinutes: 10 }],
+  financials: { totalRooms: 130, occupiedRooms: 104, trevpar: 14000, ancillaryRevenueToday: 100000, organicAncillaryToday: 200000, directBookingShare: 0.4, otaCommissionSavedToday: 30000, energyToday: 90000, energySavedToday: 5000, staffOnShift: 40, currentRateMultiplier: 1, recommendedRateMultiplier: 1.08, currentAdr: 15000, recommendedAdr: 16200, currentRevpar: 12000, projectedRevpar: 12600, projectedOccupancy: 0.78, elasticity: 1.3 },
+  weather: { source: "simulated", days: [{ dayOffset: 0, condition: "rain", tempC: 28, rainProbability: 0.8, narrative: "Rain", fnbSpendMultiplier: 1.28, daytimePresenceBump: 0.22, zoneMultiplier: { "pool-deck": 0.56 } }] },
+  signals: { source: "live", concernScore: 0.42, trendScore: null, sources: { gdacs: true, reddit: false }, hazards: [{ name: "Cyclone X", eventType: "TC", alertLevel: "Green", fromDate: "2026-09-25", distanceKmFromResort: 1200 }], headlines: [{ source: "newsapi", title: "Heavy rain expected in Goa" }] },
+  assets: [{ name: "Chiller-1", kind: "chiller", floor: 0, status: "warning", failureProb7d: 0.62, rulDays: 9, health: 0.55 }],
   pendingRecommendations: [
     { module: "pricing", title: "Raise weekend rate", confidence: 0.8, impact: "+₹58,000", targetKind: "resort", targetId: "pricing" },
     { module: "personalization", title: "Asha Rao · 204: Offer spa upgrade", confidence: 0.85, impact: "+₹4,500", targetKind: "guest", targetId: "g-1" },
@@ -146,5 +152,102 @@ describe("executeTool: unknown tool", () => {
   it("returns an error object instead of throwing", () => {
     const result = executeTool({ name: "delete_everything", arguments: {} }, snapshot) as { error: string };
     expect(result.error).toContain("unknown tool");
+  });
+});
+
+describe("new tools", () => {
+  it("get_financials rounds money and reports pricing uplift", () => {
+    const r = executeTool({ name: "get_financials", arguments: {} }, snapshot) as { totalRevenueToday: number; pricingEngine: { projectedRevparChangePercent: number } };
+    expect(r.totalRevenueToday).toBe(1820000);
+    expect(r.pricingEngine.projectedRevparChangePercent).toBe(5);
+  });
+
+  it("get_weather_whatif explains when the projection was not computed", () => {
+    const r = executeTool({ name: "get_weather_whatif", arguments: {} }, snapshot) as { error?: string };
+    expect(r.error).toBeTruthy();
+  });
+
+  it("get_public_signals separates live and unreachable sources", () => {
+    const r = executeTool({ name: "get_public_signals", arguments: {} }, snapshot) as { concernScorePercent: number; sourcesLive: string[]; sourcesUnreachable: string[] };
+    expect(r.concernScorePercent).toBe(42);
+    expect(r.sourcesLive).toEqual(["gdacs"]);
+    expect(r.sourcesUnreachable).toEqual(["reddit"]);
+  });
+
+  it("get_asset_risk returns rounded percentages", () => {
+    const r = executeTool({ name: "get_asset_risk", arguments: {} }, snapshot) as { assets: { failureProbability7dPercent: number }[] };
+    expect(r.assets[0].failureProbability7dPercent).toBe(62);
+  });
+});
+
+describe("safeCalculate", () => {
+  it("handles precedence, percent and powers", () => {
+    expect(safeCalculate("100+20*3")).toEqual({ ok: true, result: 160 });
+    expect(safeCalculate("1200 * 65% * (1 - 20%)")).toEqual({ ok: true, result: 624 });
+    expect(safeCalculate("2^3^2")).toEqual({ ok: true, result: 512 });
+    expect(safeCalculate("₹1,25,000 x 4")).toEqual({ ok: true, result: 500000 });
+  });
+  it("rejects garbage and division by zero without evaluating code", () => {
+    expect(safeCalculate("process.exit(1)").ok).toBe(false);
+    expect(safeCalculate("5/0").ok).toBe(false);
+  });
+});
+
+describe("suggestTools + searchKnowledge", () => {
+  it("routes indirect money and weather questions", () => {
+    expect(suggestTools("If rain cuts pool revenue by 20% what do we lose?")).toEqual(expect.arrayContaining(["get_financials", "get_weather_outlook", "calculate"]));
+  });
+  it("finds the right system facts", () => {
+    expect(searchKnowledge("which APIs do you integrate")[0].id).toBe("apis");
+    expect(searchKnowledge("how is fire detected on cctv")[0].id).toBe("cctv");
+    expect(searchKnowledge("explain the monte carlo what-if")[0].id).toBe("weather-whatif");
+  });
+});
+
+describe("ungroundedFigures", () => {
+  it("flags invented rupee figures but accepts grounded ones", () => {
+    const data = "totalRevenueToday: 2149625, result: 537406.25";
+    expect(ungroundedFigures("Revenue is ₹21,49,625 and 25% is ₹5,37,406", data)).toEqual([]);
+    expect(ungroundedFigures("The pool-deck earns ₹1,20,000 a day", data)).toEqual([120000]);
+  });
+});
+
+describe("precomputeUserMath", () => {
+  it("annualises a monthly lakh figure and applies a percentage range", () => {
+    const out = precomputeUserMath("We spend about ₹8 lakh a month on repairs. If we cut it by 20 to 40%, what do we save a year?")!;
+    expect(out).toContain("₹96,00,000");
+    expect(out).toContain("20% of ₹96,00,000 = ₹19,20,000");
+    expect(out).toContain("40% of ₹96,00,000 = ₹38,40,000");
+  });
+  it("returns null when the user gave no amount", () => {
+    expect(precomputeUserMath("how is the weather")).toBeNull();
+  });
+});
+
+describe("composeAnswer", () => {
+  it("answers the user-figure savings question exactly, no LLM", () => {
+    const r = composeAnswer("We spend about ₹8 lakh a month on chiller repairs. If predictive maintenance cuts unplanned-failure cost by 20 to 40%, what do we save a year?", snapshot)!;
+    expect(r.reply).toContain("₹19,20,000 to ₹38,40,000 per year");
+  });
+  it("re-prices commission at another OTA rate", () => {
+    const r = composeAnswer("How much commission did direct bookings save us and what would it be at a 25% OTA rate?", snapshot)!;
+    expect(r.reply).toContain("25%");
+    expect(r.toolsUsed).toContain("get_financials");
+  });
+  it("treats a zone demand cut as outlet-level, not total revenue", () => {
+    const r = composeAnswer("Suppose heavy rain cuts pool-deck demand by 55%. How much revenue is at risk?", snapshot)!;
+    expect(r.reply).toContain("does not track revenue per outlet");
+    expect(r.reply).toContain("₹55,000");
+  });
+  it("builds a templated weather briefing with actions", () => {
+    const r = composeAnswer("Will the rain this week hurt us and how should we prepare?", snapshot)!;
+    expect(r.reply).toContain("Suggested actions");
+    expect(r.toolsUsed).toContain("get_weather_outlook");
+  });
+  it("leaves how-it-works weather questions to the knowledge tool", () => {
+    expect(composeAnswer("How does the weather what-if work?", snapshot)).toBeNull();
+  });
+  it("falls through for open questions", () => {
+    expect(composeAnswer("Who is in room 204?", snapshot)).toBeNull();
   });
 });
