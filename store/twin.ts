@@ -10,7 +10,8 @@ export type LayerId =
   | "sentiment"
   | "revenue"
   | "housekeeping"
-  | "energy";
+  | "energy"
+  | "weather";
 
 export type SelectionKind = "room" | "asset" | "zone" | "staff" | "guest";
 
@@ -96,4 +97,5 @@ export const layerMeta: Record<LayerId, { label: string; short: string; descript
   revenue: { label: "Revenue", short: "REV", description: "Trailing 7-day RevPAR contribution per room.", kind: "sequential" },
   housekeeping: { label: "Housekeeping", short: "HK", description: "Outstanding housekeeping minutes and queue position.", kind: "sequential" },
   energy: { label: "Energy", short: "kWh", description: "Estimated daily conditioning energy, flagged when spent on vacant rooms.", kind: "sequential" },
+  weather: { label: "Weather Twin", short: "WX", description: "Live in-room presence under today's real weather (rooms) and the current what-if scenario's demand shift (ground-floor zones) — see the Weather What-If panel.", kind: "sequential" },
 };

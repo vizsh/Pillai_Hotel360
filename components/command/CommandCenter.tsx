@@ -19,6 +19,8 @@ import { ConciergeDock } from "./ConciergeDock";
 import { DollhouseHud } from "./DollhouseHud";
 import { AskCaption } from "./AskCaption";
 import { WhatIfPanel } from "./WhatIfPanel";
+import { WeatherTwinPanel } from "./WeatherTwinPanel";
+import { useWeatherWhatIf } from "@/store/weatherWhatIf";
 import { LoadingOverlay, Palette, HelpSheet } from "./Overlays";
 import { DirectorCaptions } from "./DirectorCaptions";
 import { MethodologyPanel } from "./MethodologyPanel";
@@ -39,6 +41,8 @@ export function CommandCenter() {
   useSocialWeatherSignals();
   const whatIfOpen = useUi((s) => s.whatIfOpen);
   const setWhatIf = useUi((s) => s.setWhatIf);
+  const weatherWhatIfOpen = useUi((s) => s.weatherWhatIfOpen);
+  const setWeatherWhatIf = useUi((s) => s.setWeatherWhatIf);
   const hydrate = useSession((s) => s.hydrate);
   useEffect(() => {
     void hydrate();
@@ -127,6 +131,20 @@ export function CommandCenter() {
         <DollhouseHud />
         <AskCaption />
         {whatIfOpen && <WhatIfPanel onClose={() => setWhatIf(false)} />}
+        {weatherWhatIfOpen && (
+          <div className="pointer-events-auto absolute left-[236px] top-[74px] z-30 max-h-[calc(100vh-100px)] w-[380px] overflow-y-auto">
+            <WeatherTwinPanel
+              onClose={() => {
+                setWeatherWhatIf(false);
+                useWeatherWhatIf.getState().setActive(false);
+              }}
+              onResult={(scenario, zoneMultiplier, narrative) => {
+                useWeatherWhatIf.getState().setResult(scenario, zoneMultiplier, narrative);
+                useWeatherWhatIf.getState().setActive(true);
+              }}
+            />
+          </div>
+        )}
         <MethodologyPanel />
         <AutomationScenariosPanel />
         <Onboarding />

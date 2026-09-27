@@ -14,6 +14,7 @@ import { FaultTrace } from "./FaultTrace";
 import { DebugBridge, ReadySignal } from "./DebugBridge";
 import { GuestFlow } from "./GuestFlow";
 import { Tour, IdleOrbit } from "./Tour";
+import { WeatherFX } from "./WeatherFX";
 import { useProfile, useQuality } from "@/store/quality";
 import { useTwin } from "@/store/twin";
 
@@ -56,6 +57,7 @@ export function TwinCanvas() {
         <GuestFlow />
         <Markers />
         <FaultTrace />
+        <WeatherFX />
         <Tour />
         <IdleOrbit />
         <ReadySignal />

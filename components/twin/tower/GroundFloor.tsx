@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef } from "react";
+import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import type { ThreeEvent } from "@react-three/fiber";
 import type { FloorSpec, ResortModel, ZoneCell } from "@/lib/architecture/types";
@@ -10,6 +11,10 @@ import { makeCore, makeFurniture, makeGlass, makeMullion, makeSlab, makeWall } f
 import { FloorGroup, useRegisterMaterial } from "../FloorGroup";
 import { useProfile } from "@/store/quality";
 import { useTwin } from "@/store/twin";
+import { useSim } from "@/store/sim";
+import { useWeatherWhatIf } from "@/store/weatherWhatIf";
+import { forecastWeather } from "@/lib/intelligence/weather";
+import { weatherDemandProfile } from "@/lib/intelligence/weatherImpact";
 import { AssetMeshes } from "../Assets";
 
 const zoneTint: Record<string, string> = {
@@ -28,6 +33,12 @@ const zoneTint: Record<string, string> = {
   "sky-bar": "#2a2238",
 };
 
+const tmpZoneColor = new THREE.Color();
+const zoneTintCache: Partial<Record<string, THREE.Color>> = {};
+function baseTint(kind: string): THREE.Color {
+  return (zoneTintCache[kind] ??= new THREE.Color(zoneTint[kind] ?? "#222"));
+}
+
 function Zones({ zones, y = 0 }: { zones: ZoneCell[]; y?: number }) {
   const ref = useRef<THREE.InstancedMesh>(null!);
   const geo = useMemo(() => new THREE.BoxGeometry(1, 0.05, 1), []);
@@ -38,19 +49,56 @@ function Zones({ zones, y = 0 }: { zones: ZoneCell[]; y?: number }) {
     return m;
   }, []);
   useRegisterMaterial(mat);
+
   useEffect(() => {
     const m = new THREE.Matrix4();
-    const c = new THREE.Color();
     zones.forEach((z, i) => {
       m.makeScale(z.w - 0.4, 1, z.d - 0.4);
       m.setPosition(z.center[0], y + 0.03, z.center[2]);
       ref.current.setMatrixAt(i, m);
-      ref.current.setColorAt(i, c.set(zoneTint[z.kind] ?? "#222"));
+      ref.current.setColorAt(i, baseTint(z.kind)); // base tint on mount — the frame loop below only ever overlays or reverts to this, never sets it first
     });
     ref.current.instanceMatrix.needsUpdate = true;
     if (ref.current.instanceColor) ref.current.instanceColor.needsUpdate = true;
     ref.current.computeBoundingSphere();
   }, [zones, y]);
+
+  // Weather layer tint: reads the live 3D twin's own weather what-if store imperatively
+  // (store/weatherWhatIf.ts), the same getState() pattern RoomPlates.tsx already uses for
+  // useTwin/useSim inside a frame loop — so dragging the Weather What-If panel's sliders
+  // repaints these exact zone plates, not a separate illustration of them. When that panel
+  // isn't open, falls back to today's real forecasted weather (lib/intelligence/weather.ts),
+  // so the "weather" layer always shows something true even with no what-if in progress.
+  const lastLayer = useRef("");
+  const lastKey = useRef("");
+  useFrame(() => {
+    const m = ref.current;
+    if (!m) return;
+    const { activeLayer } = useTwin.getState();
+    if (activeLayer !== "weather") {
+      if (lastLayer.current === "weather") {
+        zones.forEach((z, i) => m.setColorAt(i, baseTint(z.kind)));
+        if (m.instanceColor) m.instanceColor.needsUpdate = true;
+      }
+      lastLayer.current = activeLayer;
+      return;
+    }
+    const wif = useWeatherWhatIf.getState();
+    const zoneMultiplier = wif.active ? wif.zoneMultiplier : weatherDemandProfile(forecastWeather(useSim.getState().state)[0]).zoneMultiplier;
+    const key = JSON.stringify(zoneMultiplier);
+    if (lastLayer.current === "weather" && lastKey.current === key) return;
+    lastLayer.current = "weather";
+    lastKey.current = key;
+    zones.forEach((z, i) => {
+      const mult = zoneMultiplier[z.kind] ?? 1;
+      tmpZoneColor.copy(baseTint(z.kind));
+      if (mult > 1) tmpZoneColor.lerp(new THREE.Color("#f4436c"), Math.min(0.7, (mult - 1) * 1.1));
+      else if (mult < 1) tmpZoneColor.lerp(new THREE.Color("#0891b2"), Math.min(0.7, (1 - mult) * 1.1));
+      m.setColorAt(i, tmpZoneColor);
+    });
+    if (m.instanceColor) m.instanceColor.needsUpdate = true;
+  });
+
   const onClick = (e: ThreeEvent<MouseEvent>) => {
     e.stopPropagation();
     if (e.instanceId === undefined) return;

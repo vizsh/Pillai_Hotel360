@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { CloudRain, Sun, Thermometer } from "lucide-react";
+import { CloudRain, Sun, Thermometer, X } from "lucide-react";
 import { useSim } from "@/store/sim";
 import { getModel } from "@/lib/architecture/model";
 import { runWeatherWhatIf, type WeatherScenarioInput, type MetricBand } from "@/lib/intelligence/weatherWhatIf";
@@ -45,7 +45,7 @@ function DeltaRow({ label, sub, band, fmt, unit, betterIsHigher }: { label: stri
   );
 }
 
-export function WeatherTwinPanel({ onResult }: { onResult?: (zoneMultiplier: Record<string, number>, conditionLabel: string) => void }) {
+export function WeatherTwinPanel({ onResult, onClose }: { onResult?: (scenario: WeatherScenarioInput, zoneMultiplier: Record<string, number>, conditionLabel: string) => void; onClose?: () => void }) {
   const { state } = useSim();
   useSim((s) => s.version);
   const model = getModel();
@@ -67,7 +67,7 @@ export function WeatherTwinPanel({ onResult }: { onResult?: (zoneMultiplier: Rec
   const result = useMemo(() => runWeatherWhatIf(state, model, committed), [state, model, committed]);
 
   useEffect(() => {
-    onResult?.(result.zoneMultiplier, result.narrative);
+    onResult?.(committed, result.zoneMultiplier, result.narrative);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [result]);
 
@@ -75,7 +75,14 @@ export function WeatherTwinPanel({ onResult }: { onResult?: (zoneMultiplier: Rec
     <div className="flex flex-col gap-3 rounded-xl border border-[#f5a524]/30 bg-deep/70 p-4">
       <div className="flex items-center justify-between">
         <span className="font-display text-[14.5px] font-semibold text-hi">Weather Digital Twin — what if?</span>
-        <Provenance kind="modeled" />
+        <div className="flex items-center gap-1.5">
+          <Provenance kind="modeled" />
+          {onClose && (
+            <button onClick={onClose} className="grid h-7 w-7 place-items-center rounded-md text-low hover:bg-white/5 hover:text-hi" aria-label="Close">
+              <X size={13} />
+            </button>
+          )}
+        </div>
       </div>
       <p className="text-[11px] leading-relaxed text-mid">
         Fast-forwards {result.horizonHours}h of the real simulation ({result.runs} independent runs) under this weather versus an otherwise-identical clear day, and reports the difference — not a formula, the actual production tick engine run twice.

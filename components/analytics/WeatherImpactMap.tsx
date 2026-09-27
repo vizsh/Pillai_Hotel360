@@ -54,6 +54,15 @@ export function WeatherImpactMap({ zoneMultiplier, conditionLabel }: { zoneMulti
   const scale = Math.min((VW - PAD * 2) / bounds.w, (VH - PAD * 2) / bounds.h);
   const toSvg = (x: number, z: number) => ({ x: PAD + (x - bounds.minX) * scale, y: PAD + (z - bounds.minZ) * scale });
 
+  // Presentation-only sizing helpers (no effect on zoneMultiplier or any simulation value):
+  // some zones (e.g. F&B Store, Housekeeping Store) are genuinely narrow relative to the
+  // property's overall footprint, so a fixed-size two-line label was overflowing its own rect
+  // and overlapping the neighbouring zone's text. Below a size threshold the label shrinks to
+  // just the name, then to a truncated name, then (if there's truly no room) to nothing visible
+  // — a <title> tooltip always carries the full name + exact reading regardless, so no
+  // information is lost, only decluttered.
+  const truncate = (text: string, maxChars: number) => (text.length <= maxChars ? text : text.slice(0, Math.max(1, maxChars - 1)) + "…");
+
   return (
     <div className="rounded-lg border border-stroke bg-void/60 p-2">
       <svg viewBox={`0 0 ${VW} ${VH}`} className="w-full" style={{ aspectRatio: `${VW}/${VH}` }}>
@@ -65,15 +74,37 @@ export function WeatherImpactMap({ zoneMultiplier, conditionLabel }: { zoneMulti
           const m = zoneMultiplier[z.kind] ?? 1;
           const affected = Math.abs(m - 1) > 0.02;
           const pct = Math.round((m - 1) * 100);
+          const detail = affected ? `demand ${pct > 0 ? "+" : ""}${pct}%` : "no effect";
+
+          const nameSize = w < 46 ? 7 : 9;
+          const detailSize = 7.5;
+          const showDetail = h >= 30 && w >= 40;
+          const showName = h >= 16 && w >= 22;
+          const nameMaxChars = Math.max(3, Math.floor((w - 4) / (nameSize * 0.62)));
+          const detailMaxChars = Math.max(3, Math.floor((w - 4) / (detailSize * 0.62)));
+          const clipId = `clip-${z.id}`;
+
           return (
             <g key={z.id}>
+              <title>
+                {z.name} — {detail}
+              </title>
+              <clipPath id={clipId}>
+                <rect x={topLeft.x} y={topLeft.y} width={w} height={h} rx={3} />
+              </clipPath>
               <rect x={topLeft.x} y={topLeft.y} width={w} height={h} rx={3} fill={multiplierColor(m)} stroke={affected ? multiplierColor(m > 1 ? Math.min(1.6, m + 0.15) : Math.max(0.4, m - 0.15)) : "#232a35"} strokeWidth={affected ? 1.5 : 1} opacity={affected ? 0.85 : 0.55} />
-              <text x={topLeft.x + w / 2} y={topLeft.y + h / 2 - 3} textAnchor="middle" fontSize={9} fill={affected ? "#fff" : "#7a8494"} className="mono" style={{ pointerEvents: "none" }}>
-                {z.name}
-              </text>
-              <text x={topLeft.x + w / 2} y={topLeft.y + h / 2 + 9} textAnchor="middle" fontSize={7.5} fill={affected ? "#ffe" : "#4a5261"} className="mono" style={{ pointerEvents: "none" }}>
-                {affected ? `demand ${pct > 0 ? "+" : ""}${pct}%` : "no effect"}
-              </text>
+              <g clipPath={`url(#${clipId})`} style={{ pointerEvents: "none" }}>
+                {showName && (
+                  <text x={topLeft.x + w / 2} y={topLeft.y + h / 2 + (showDetail ? -3 : 3)} textAnchor="middle" fontSize={nameSize} fill={affected ? "#fff" : "#7a8494"} className="mono">
+                    {truncate(z.name, nameMaxChars)}
+                  </text>
+                )}
+                {showDetail && (
+                  <text x={topLeft.x + w / 2} y={topLeft.y + h / 2 + 9} textAnchor="middle" fontSize={detailSize} fill={affected ? "#ffe" : "#4a5261"} className="mono">
+                    {truncate(detail, detailMaxChars)}
+                  </text>
+                )}
+              </g>
             </g>
           );
         })}

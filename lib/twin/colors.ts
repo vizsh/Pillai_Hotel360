@@ -71,6 +71,13 @@ export function roomLayerValue(layer: LayerId, cell: RoomCell, st: RoomState): n
       return clamp(st.hkMinutes / 45, 0, 1);
     case "energy":
       return clamp(st.energyKwh / 48, 0, 1);
+    case "weather":
+      // Today's real, already-live in-room presence (lib/sim/engine.ts's daytimePresenceBump
+      // — genuinely higher right now on a rainy/heatwave day, not illustrative). The
+      // hypothetical scenario being tweaked in the Weather What-If panel shows up on the
+      // ground-floor zone tint instead (GroundFloor.tsx's Zones), not here — this is always
+      // today's actual weather effect on actual rooms.
+      return st.presence;
     default:
       return 0;
   }
@@ -96,6 +103,8 @@ export function roomColor(layer: LayerId, cell: RoomCell, st: RoomState, out = n
       if (st.conditioned && !st.guestId) return rampColor(ramps.heat, 0.6 + v * 0.4, out);
       return rampColor(ramps.cyan, v, out);
     }
+    case "weather":
+      return rampColor(ramps.cyan, roomLayerValue(layer, cell, st), out);
   }
 }
 

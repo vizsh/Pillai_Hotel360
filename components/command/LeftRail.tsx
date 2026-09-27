@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { Orbit, Layers3, Rows3, ScanLine, Map, Building2, TreePalm, Users, Bell, Tag as TagIcon, Route, Play, Square, ArrowUpRight, Zap, Sparkles } from "lucide-react";
+import { Orbit, Layers3, Rows3, ScanLine, Map, Building2, TreePalm, Users, Bell, Tag as TagIcon, Route, Play, Square, ArrowUpRight, Zap, Sparkles, CloudRain } from "lucide-react";
 import { routes } from "@/components/analytics/AnalyticsShell";
 import { useTwin, layerMeta, type LayerId, type ViewMode } from "@/store/twin";
 import { useUi } from "@/store/ui";
@@ -63,8 +63,8 @@ const rampCss: Record<string, string> = {
   heat: "linear-gradient(90deg,#14263a,#5b6879,#f5a524,#f4436c)",
   diverging: "linear-gradient(90deg,#f4436c,#5b6879,#2a3647,#34d399)",
 };
-const layerRamp: Record<LayerId, string> = { risk: "heat", occupancy: "", maintenance: "heat", sentiment: "diverging", revenue: "cyan", housekeeping: "heat", energy: "cyan" };
-const layerEnds: Record<LayerId, [string, string]> = { risk: ["low", "critical"], occupancy: ["", ""], maintenance: ["0%", "99%"], sentiment: ["−1", "+1"], revenue: ["₹0", "₹210k"], housekeeping: ["0 min", "45 min"], energy: ["0", "48 kWh"] };
+const layerRamp: Record<LayerId, string> = { risk: "heat", occupancy: "", maintenance: "heat", sentiment: "diverging", revenue: "cyan", housekeeping: "heat", energy: "cyan", weather: "cyan" };
+const layerEnds: Record<LayerId, [string, string]> = { risk: ["low", "critical"], occupancy: ["", ""], maintenance: ["0%", "99%"], sentiment: ["−1", "+1"], revenue: ["₹0", "₹210k"], housekeeping: ["0 min", "45 min"], energy: ["0", "48 kWh"], weather: ["out & about", "in-room"] };
 
 export function LeftRail() {
   const { viewMode, setViewMode, isolatedFloor, setIsolatedFloor, activeLayer, setLayer, showStaff, showAlerts, showLabels, showGuests, toggle, tourPlaying, setTour } = useTwin();
@@ -199,6 +199,18 @@ export function LeftRail() {
           <span className="flex-1 text-left">What if…</span>
         </button>
         <p className="px-1 text-[10.5px] leading-snug text-low">Project a hypothetical occupancy through the real pricing, staffing and inventory engines — nothing here changes the live sim.</p>
+        <button
+          onClick={() => {
+            const opening = !useUi.getState().weatherWhatIfOpen;
+            useUi.getState().setWeatherWhatIf(opening);
+            if (opening) setLayer("weather");
+          }}
+          className="flex h-8 items-center gap-2.5 rounded-md border border-sky-500/40 px-2 text-[12.5px] text-mid transition-colors hover:bg-sky-500/10 hover:text-hi"
+        >
+          <CloudRain size={13} className="text-sky-400" />
+          <span className="flex-1 text-left">Weather what if…</span>
+        </button>
+        <p className="px-1 text-[10.5px] leading-snug text-low">Fast-forwards the real simulation under a hypothetical weather scenario and repaints the ground-floor zones live — the Digital Twin, not a separate map.</p>
       </div>
 
       <ScenarioPanel />

@@ -49,7 +49,7 @@ export function WeatherTwinPage() {
       </Card>
 
       <div className="grid grid-cols-2 gap-4">
-        <WeatherTwinPanel onResult={(zm, narrative) => { setZoneMultiplier(zm); setConditionLabel(narrative); }} />
+        <WeatherTwinPanel onResult={(_scenario, zm, narrative) => { setZoneMultiplier(zm); setConditionLabel(narrative); }} />
         <div className="flex flex-col gap-4">
           <Card title="Geospatial impact map">
             <WeatherImpactMap zoneMultiplier={zoneMultiplier} conditionLabel={conditionLabel} />

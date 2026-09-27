@@ -9,6 +9,7 @@ interface UiStore {
   paletteOpen: boolean;
   helpOpen: boolean;
   whatIfOpen: boolean;
+  weatherWhatIfOpen: boolean;
   /** Global demo mode: when true, every pending recommendation in BottomDock.tsx counts down
    * and auto-executes through the exact same acceptRecommendation() a manual click would call
    * — a real, reversible glimpse of "what if this ran itself," not a scripted fake sequence.
@@ -25,6 +26,7 @@ interface UiStore {
   setPalette: (v: boolean) => void;
   setHelp: (v: boolean) => void;
   setWhatIf: (v: boolean) => void;
+  setWeatherWhatIf: (v: boolean) => void;
   setAutopilot: (v: boolean) => void;
   setScenarioPanelOpen: (v: boolean) => void;
   setMobilePanel: (p: MobilePanel) => void;
@@ -38,6 +40,7 @@ export const useUi = create<UiStore>()(
     paletteOpen: false,
     helpOpen: false,
     whatIfOpen: false,
+    weatherWhatIfOpen: false,
     autopilot: false,
     scenarioPanelOpen: false,
     mobilePanel: "none",
@@ -46,6 +49,7 @@ export const useUi = create<UiStore>()(
     setPalette: (paletteOpen) => set({ paletteOpen }),
     setHelp: (helpOpen) => set({ helpOpen }),
     setWhatIf: (whatIfOpen) => set({ whatIfOpen }),
+    setWeatherWhatIf: (weatherWhatIfOpen) => set({ weatherWhatIfOpen }),
     setAutopilot: (autopilot) => set({ autopilot }),
     setScenarioPanelOpen: (scenarioPanelOpen) => set({ scenarioPanelOpen }),
     setMobilePanel: (mobilePanel) => set((s) => ({ mobilePanel: s.mobilePanel === mobilePanel ? "none" : mobilePanel })),
