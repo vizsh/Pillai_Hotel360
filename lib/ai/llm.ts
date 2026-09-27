@@ -60,7 +60,7 @@ async function nugenChat(messages: ChatTurn[], tools?: readonly unknown[]): Prom
         }
         return { function: { name: t.function!.name!, arguments: args } };
       });
-    const content = (msg.content ?? "").trim();
+    const content = (msg.content ?? "").replace(/<think>[\s\S]*?<\/think>/g, "").trim();
     if (!content && !tool_calls.length) return null;
     return { content, tool_calls: tool_calls.length ? tool_calls : undefined, provider: "nugen", model: nugenModelId() };
   } catch {
