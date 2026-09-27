@@ -17,12 +17,12 @@ Heatwave severity      = clamp((temp − 34) / 6, 0.3, 1)
 
 Guests sit out a storm indoors, so daytime in-room presence rises, which cascades into the existing eco-mode energy logic; heat raises chiller wear in the predictive-maintenance hazard model.
 
-## 2 · Paired Monte Carlo what-if — [`lib/intelligence/weatherWhatIf.ts`](../lib/intelligence/weatherWhatIf.ts)
+## 2 · Monte Carlo what-if — [`lib/intelligence/weatherWhatIf.ts`](../lib/intelligence/weatherWhatIf.ts)
 
 No hand-written formula guesses at effects. The what-if **clones the live state and fast-forwards the real tick engine** for 8 hours in 30-minute steps, once under the scenario and once under an otherwise identical clear day, across 6 independent seeds. Each seed runs under both conditions, so the difference isolates the *causal* effect of the weather, not the simulation's own randomness.
 
 ```
-Δmetric(seed) = metric(scenario, seed) − metric(clear, seed)
+Δmetric(run) = metric(scenario arm) − metric(clear-day arm)
 band = P10 / P50 / P90 of Δ across seeds
 metrics: occupancy · F&B demand · room energy · unmet staffing · HVAC risk · open F&B/concierge requests
 ```

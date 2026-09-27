@@ -162,7 +162,7 @@ export function composeWeatherBriefing(message: string, snapshot: OpsSnapshot): 
   const whatIf = scenario
     ? [
         "",
-        `**Modeled ${heat ? "heatwave" : "rain"} day vs a clear day, next 8 hours (Monte Carlo, ${scenario.runs} paired runs):**`,
+        `**Modeled ${heat ? "heatwave" : "rain"} day vs a clear day, next 8 hours (Monte Carlo, ${scenario.runs} independent runs):**`,
         md(
           [
             ["Occupancy", band(scenario.occupancyDelta, (n) => `${signed(n * 100)} pp`)],

@@ -15,13 +15,13 @@ import { beliefSlope } from "./weatherLearner";
  * Rather than a hand-written formula guessing at those effects, this clones the live state and
  * fast-forwards the REAL simulation tick (lib/sim/engine.ts) — the same one running the actual
  * dashboard — once with the forced weather scenario and once with forced clear weather, for
- * several independent random seeds, and reports the paired difference. Every cascade that shows
+ * several independent random seeds, and reports the difference distribution. Every cascade that shows
  * up (F&B demand, energy, staffing, asset risk) is one the tick already produces on its own
  * (lib/intelligence/weatherImpact.ts's profile is the only weather-specific logic in the whole
  * chain) — this file does no simulation of its own, only orchestrates and measures it. The
- * paired seeds (same seed run under both "clear" and the scenario) is what makes the resulting
- * percentile band a real uncertainty estimate on the CAUSAL EFFECT of the weather, not just
- * noise from the simulation's own randomness. The real state passed in is never mutated —
+ * scenario and clear-day arms each run from the same cloned starting state with different random
+ * seeds (independent-sample Monte Carlo), so the percentile band reflects both the weather effect and
+ * the simulation's own randomness — six runs give a coarse band, and the UI says so. The real state passed in is never mutated —
  * structuredClone makes a fully independent copy per run, discarded immediately after. */
 
 export interface WeatherScenarioInput {
@@ -41,7 +41,7 @@ export interface WeatherWhatIfResult {
   narrative: string;
   runs: number;
   horizonHours: number;
-  /** Every field is the SCENARIO-MINUS-CLEAR delta over the horizon, paired per random seed —
+  /** Every field is the SCENARIO-MINUS-CLEAR delta over the horizon, per run —
    * positive means the scenario raises that metric relative to an otherwise-identical clear day. */
   occupancyDelta: MetricBand;
   fnbDemandDelta: MetricBand;

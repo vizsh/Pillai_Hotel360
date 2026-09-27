@@ -44,7 +44,7 @@ Ask the Ops Assistant *"We spend ₹8 lakh a month on repairs; if predictive mai
 
 ## 9. It rehearses the storm before it arrives
 
-The weather what-if fast-forwards the *real* simulation engine under a scenario versus an identical clear day across paired seeds and reports P10/P50/P90 bands — a causal estimate, not a guess — fed by live weather, official hazard alerts and public signals. See [WEATHER_AND_SIGNALS.md](WEATHER_AND_SIGNALS.md).
+The weather what-if fast-forwards the *real* simulation engine under a scenario versus an identical clear day across independent seeds and reports P10/P50/P90 bands — a causal estimate, not a guess — fed by live weather, official hazard alerts and public signals. See [WEATHER_AND_SIGNALS.md](WEATHER_AND_SIGNALS.md).
 
 ## 10. Every external source is failure-isolated
 

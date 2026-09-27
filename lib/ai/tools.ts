@@ -410,7 +410,7 @@ export function executeTool(call: ToolCall, snapshot: OpsSnapshot): unknown {
       const fmt = (r: typeof w.rain) => ({
         scenario: r.scenario,
         narrative: r.narrative,
-        method: `${r.runs} paired seeds, ${r.horizonHours}h horizon; every figure is scenario minus an identical clear day (positive = scenario raises it)`,
+        method: `${r.runs} independent seeds, ${r.horizonHours}h horizon; every figure is scenario minus an identical clear day (positive = scenario raises it)`,
         occupancyDelta: band(r.occupancyDelta, 3),
         fnbDemandDelta: band(r.fnbDemandDelta),
         energyDelta: band(r.energyDelta),
@@ -419,7 +419,7 @@ export function executeTool(call: ToolCall, snapshot: OpsSnapshot): unknown {
         openFnbConciergeRequestsDelta: band(r.openFnbConciergeRequestsDelta),
         zoneDemandMultipliers: Object.fromEntries(Object.entries(r.zoneMultiplier).map(([k, v]) => [k, round2(v)])),
       });
-      return { rain: which !== "heatwave" ? fmt(w.rain) : undefined, heatwave: which !== "rain" ? fmt(w.heatwave) : undefined, caveat: "Modeled, not measured; six paired runs give a coarse uncertainty band." };
+      return { rain: which !== "heatwave" ? fmt(w.rain) : undefined, heatwave: which !== "rain" ? fmt(w.heatwave) : undefined, caveat: "Modeled, not measured; six independent runs give a coarse uncertainty band." };
     }
     case "get_public_signals": {
       const g = snapshot.signals;

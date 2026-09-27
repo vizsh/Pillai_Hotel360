@@ -41,7 +41,7 @@ Every recommendation carries the *measured inputs* that produced it (a Weibull h
 |---|---|---|
 | **12 decision modules** | Predictive maintenance (Weibull), dynamic pricing (elasticity), staffing (greedy + swap), inventory (Holt/EOQ), sentiment, segmentation (k-means), personalization, concierge, guest relocation, energy, group blocks, in-stay recovery | [`lib/intelligence`](lib/intelligence) · [math](docs/INTELLIGENCE_MODELS.md) |
 | **3 composite views** | Causal chain, 14-day demand spine, Guest Experience Index | `lib/intelligence` |
-| **Weather-aware digital twin** | Live forecast drives the simulation; paired Monte Carlo what-if on the *real* tick engine; **online Bayesian calibration** (the twin keeps learning); **cascade graph** of 1st/2nd/3rd-order effects; plain-English scenarios; regional map with radar and hazard events | [`/weather-twin`](app/weather-twin) · [docs](docs/WEATHER_AND_SIGNALS.md) |
+| **Weather-aware digital twin** | Live forecast drives the simulation; Monte Carlo what-if on the *real* tick engine; **online Bayesian calibration** (the twin keeps learning); **cascade graph** of 1st/2nd/3rd-order effects; plain-English scenarios; regional map with radar and hazard events | [`/weather-twin`](app/weather-twin) · [docs](docs/WEATHER_AND_SIGNALS.md) |
 | **Public-signal intelligence** | 7 live sources → concern score, plus **traveller-impact reading** of each post (cancellation, disruption, flooding, safety…) by the Nugen-aligned model with a rules fallback | [`app/api/social-weather-signals`](app/api/social-weather-signals) |
 | **CCTV vision layer** | Fire, altercation/distress, parking occupancy — real in-browser detection over bundled test clips, persistence-gated | [`lib/vision`](lib/vision) · [docs](docs/SURVEILLANCE.md) |
 | **AI assistants** | Ops Assistant + guest Concierge on a **Nugen-aligned model with automatic Ollama fallback**; exact-maths composers; grounding gate | [`lib/ai`](lib/ai) · [docs](docs/AI_ASSISTANTS.md) |
@@ -56,7 +56,7 @@ Every recommendation carries the *measured inputs* that produced it (a Weibull h
 <table>
 <tr>
 <td width="50%"><img src="docs/assets/command-center.jpg" alt="Command center: 3D twin, KPIs, asset risk and recommendation queue"><br><sub><b>Command center</b> — live 3D twin, asset-risk pins, KPIs, and a recommendation queue where every card shows its basis.</sub></td>
-<td width="50%"><img src="docs/assets/weather-twin.jpg" alt="Weather digital twin with live radar map"><br><sub><b>Weather digital twin</b> — live 7-day forecast, regional map with radar, and the paired Monte Carlo what-if.</sub></td>
+<td width="50%"><img src="docs/assets/weather-twin.jpg" alt="Weather digital twin with live radar map"><br><sub><b>Weather digital twin</b> — live 7-day forecast, regional map with radar, and the Monte Carlo what-if.</sub></td>
 </tr>
 <tr>
 <td width="50%"><img src="docs/assets/surveillance.jpg" alt="CCTV parking detection with zone grid"><br><sub><b>CCTV vision</b> — COCO-SSD vehicle detection binned into a 12-zone grid, running in the browser on bundled footage.</sub></td>
@@ -218,7 +218,7 @@ tests/              270+ vitest tests
 
 ## Limitations
 
-Sentiment is lexicon-based; pricing blends elasticity by guest mix rather than estimating per channel; CCTV fire and altercation detectors are calibrated heuristics, not trained classifiers; public-signal scoring is a coarse keyword-and-hazard blend and some sources may be unreachable from a given network; the what-if band uses six paired runs; weather and map coordinates are fixed to Goa as a stand-in property. The full list is in the [feature guide](docs/FEATURE_GUIDE.md#limitations).
+Sentiment is lexicon-based; pricing blends elasticity by guest mix rather than estimating per channel; CCTV fire and altercation detectors are calibrated heuristics, not trained classifiers; public-signal scoring is a coarse keyword-and-hazard blend and some sources may be unreachable from a given network; the what-if band uses six independent runs; weather and map coordinates are fixed to Goa as a stand-in property. The full list is in the [feature guide](docs/FEATURE_GUIDE.md#limitations).
 
 ---
 
