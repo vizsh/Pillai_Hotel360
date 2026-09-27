@@ -176,6 +176,22 @@ export function composeWeatherBriefing(message: string, snapshot: OpsSnapshot): 
         ),
       ]
     : ["", "_The Monte Carlo band is on the Weather what-if panel; it was not computed for this question._"];
+  // Feature E — a quantified ₹ exposure line, built from the SAME what-if bands already shown above,
+  // not a separately invented number. Two illustrative unit costs (labelled as such, same honesty
+  // convention as composeAssetAnswer's reactive-repair multiple) turn "shifts short" and "HVAC risk
+  // rose" into one operating-exposure figure a GM can act on without recomputing it by hand.
+  const SHIFT_COST_ILLUSTRATIVE = 1800; // ₹ per uncovered shift (illustrative labour cost, not measured)
+  const REACTIVE_REPAIR_ILLUSTRATIVE = 150000; // ₹ per major HVAC/chiller failure (illustrative, 3-5x planned per docs/INTELLIGENCE_MODELS.md)
+  let exposureLine: string | null = null;
+  if (scenario) {
+    const staffingExposure = Math.max(0, scenario.staffingUnmetDelta.p50) * SHIFT_COST_ILLUSTRATIVE;
+    const hvacExposure = Math.max(0, scenario.hvacRiskDelta.p50) * REACTIVE_REPAIR_ILLUSTRATIVE;
+    const total = staffingExposure + hvacExposure;
+    if (total > 100) {
+      exposureLine = `**Modeled operating exposure for this scenario: ${inr(total)}** (${inr(staffingExposure)} from ${scenario.staffingUnmetDelta.p50.toFixed(1)} uncovered shifts at an illustrative ${inr(SHIFT_COST_ILLUSTRATIVE)}/shift, + ${inr(hvacExposure)} from ${(scenario.hvacRiskDelta.p50 * 100).toFixed(1)} pp extra HVAC failure risk at an illustrative ${inr(REACTIVE_REPAIR_ILLUSTRATIVE)}/failure). Both unit costs are illustrative — replace with the property's own numbers for a precise figure.`;
+    }
+  }
+
   const actions: string[] = [];
   if (wet.length) actions.push("Move pool-side and sky-bar service indoors on wet days and pre-position restaurant and spa staff (indoor demand rises while pool-deck demand falls).");
   if (scenario && scenario.staffingUnmetDelta.p50 > 0.3) actions.push(`Staffing: the model shows ${scenario.staffingUnmetDelta.p50.toFixed(1)} extra unmet shift${scenario.staffingUnmetDelta.p50 >= 1.5 ? "s" : ""} (median) — rebalance or call in cover before the weather arrives.`);
@@ -186,7 +202,7 @@ export function composeWeatherBriefing(message: string, snapshot: OpsSnapshot): 
   const near = snapshot.signals.hazards[0];
   if (snapshot.signals.source === "live" && near) actions.push(near.distanceKmFromResort <= 500 ? `Regional hazard: ${near.name || `${near.eventType} ${near.alertLevel}`} is ${near.distanceKmFromResort} km away — brief the duty manager now.` : `Regional hazard: nearest official event (${near.name || `${near.eventType} ${near.alertLevel}`}) is ${near.distanceKmFromResort} km away — monitoring only, not an immediate threat.`);
   if (!actions.length) actions.push("Business as usual; re-check the forecast tomorrow.");
-  const reply = [headline, "", forecast, ...whatIf, "", "**Suggested actions**", ...actions.map((a) => `- ${a}`), "", `Provenance: ${src}; what-if figures are modeled, not measured.`].join("\n");
+  const reply = [headline, "", forecast, ...whatIf, "", ...(exposureLine ? [exposureLine, ""] : []), "**Suggested actions**", ...actions.map((a) => `- ${a}`), "", `Provenance: ${src}; what-if figures are modeled, not measured.`].join("\n");
   return { reply, toolsUsed: ["get_weather_outlook", ...(scenario ? ["get_weather_whatif"] : []), ...(snapshot.signals.source === "live" ? ["get_public_signals"] : [])] };
 }
 

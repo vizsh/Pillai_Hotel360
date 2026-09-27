@@ -251,3 +251,12 @@ describe("composeAnswer", () => {
     expect(composeAnswer("Who is in room 204?", snapshot)).toBeNull();
   });
 });
+
+describe("weather-briefing ₹ operating-exposure line (feature E)", () => {
+  it("quantifies staffing + HVAC risk exposure from the same what-if bands, labelled illustrative", () => {
+    const snap = { ...snapshot, weatherWhatIf: { rain: { scenario: { condition: "rain", tempC: 28, rainProbability: 0.9 }, narrative: "n", runs: 6, horizonHours: 8, occupancyDelta: { p10: 0, p50: 0, p90: 0 }, fnbDemandDelta: { p10: 0, p50: 0, p90: 0 }, energyDelta: { p10: 0, p50: 0, p90: 0 }, staffingUnmetDelta: { p10: 0, p50: 2, p90: 3 }, hvacRiskDelta: { p10: 0, p50: 0.02, p90: 0.03 }, openFnbConciergeRequestsDelta: { p10: 0, p50: 0, p90: 0 }, zoneMultiplier: {} }, heatwave: { scenario: { condition: "heatwave", tempC: 39, rainProbability: 0.02 }, narrative: "n", runs: 6, horizonHours: 8, occupancyDelta: { p10: 0, p50: 0, p90: 0 }, fnbDemandDelta: { p10: 0, p50: 0, p90: 0 }, energyDelta: { p10: 0, p50: 0, p90: 0 }, staffingUnmetDelta: { p10: 0, p50: 0, p90: 0 }, hvacRiskDelta: { p10: 0, p50: 0, p90: 0 }, openFnbConciergeRequestsDelta: { p10: 0, p50: 0, p90: 0 }, zoneMultiplier: {} } } } as unknown as typeof snapshot;
+    const r = composeAnswer("A cyclone hits — how should we prepare?", snap)!;
+    expect(r.reply).toContain("Modeled operating exposure");
+    expect(r.reply).toContain("illustrative");
+  });
+});

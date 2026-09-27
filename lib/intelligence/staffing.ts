@@ -1,6 +1,8 @@
 import type { ResortModel, RoomCell, Vec3 } from "@/lib/architecture/types";
 import type { Dept, Recommendation, SimState, Staff } from "@/lib/sim/types";
 import { clamp } from "@/lib/utils";
+import { forecastWeather } from "./weather";
+import { weatherDemandProfile } from "./weatherImpact";
 
 export const depts: Dept[] = ["housekeeping", "engineering", "fnb", "frontdesk", "concierge", "spa", "security"];
 
@@ -37,15 +39,34 @@ const profile: Record<Dept, number[]> = {
 
 const baseline: Record<Dept, number> = { housekeeping: 9, engineering: 3, fnb: 7, frontdesk: 3, concierge: 2, spa: 2, security: 2 };
 
+/** Weather demand bias per department, from the SAME profile the simulation tick, the what-if
+ * and the impact map already read (weatherImpact.ts) — not a new mechanic invented for the
+ * roster: a rain day shifts organic guest demand from pool-side toward indoor F&B and spa, so
+ * the department demand forecast the roster is solved against should shift the same way, or the
+ * roster is solving against yesterday's weather. */
+const DEPT_ZONE: Partial<Record<Dept, string>> = { fnb: "restaurant", spa: "spa" };
+function weatherDeptBias(state: SimState, dept: Dept): number {
+  const day = forecastWeather(state)[0];
+  const profile = weatherDemandProfile(day);
+  const zone = DEPT_ZONE[dept];
+  if (zone && profile.zoneMultiplier[zone as keyof typeof profile.zoneMultiplier] !== undefined) {
+    return profile.zoneMultiplier[zone as keyof typeof profile.zoneMultiplier]!;
+  }
+  if (dept === "housekeeping") return 1 + profile.daytimePresenceBump * 0.4; // guests in rooms all day -> more mid-stay tidy requests
+  if (dept === "concierge") return 1 + Math.max(0, profile.requestBias.concierge);
+  return 1;
+}
+
 export function forecastDemand(state: SimState, model: ResortModel): HourDemand[] {
   const occ = state.kpis.occupancy;
   const dirty = Object.values(state.rooms).filter((r) => r.status === "vacant-dirty").length;
   const risk = Object.values(state.assets).filter((a) => a.failureProb7d > 0.35).length;
+  const weatherBias = Object.fromEntries(depts.map((d) => [d, weatherDeptBias(state, d)])) as Record<Dept, number>;
   const out: HourDemand[] = [];
   for (let h = 0; h < 24; h++) {
     const demand = {} as Record<Dept, number>;
     for (const d of depts) {
-      let v = baseline[d] * profile[d][h] * (0.55 + occ * 0.6);
+      let v = baseline[d] * profile[d][h] * (0.55 + occ * 0.6) * weatherBias[d];
       if (d === "housekeeping") v += (dirty / 6) * profile[d][h];
       if (d === "engineering") v += risk * 0.6;
       if (d === "fnb" && state.scenario === "conference-block") v *= 1.25;

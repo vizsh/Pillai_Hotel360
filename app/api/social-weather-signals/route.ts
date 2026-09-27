@@ -68,6 +68,9 @@ export interface HazardEvent {
   lon: number;
   url: string;
   fromDate: string;
+  /** Which independent agency reported this — the social-trigger gate treats agreement across
+   * providers as stronger corroboration than either agency alone (lib/intelligence/socialTrigger.ts). */
+  provider: "gdacs" | "eonet";
 }
 
 const CACHE_TTL_MS = 20 * 60 * 1000;
@@ -76,6 +79,7 @@ interface CachePayload {
   hazards: HazardEvent[];
   trendScore: number | null;
   sources: Record<string, boolean>;
+  aviationActivity: AviationActivity | null;
 }
 let cache: (CachePayload & { fetchedAt: number }) | null = null;
 
@@ -143,8 +147,41 @@ async function fetchGdacs(): Promise<HazardEvent[]> {
         lon,
         url: String((p.url as { report?: string } | undefined)?.report ?? "https://www.gdacs.org"),
         fromDate: String(p.fromdate ?? ""),
+        provider: "gdacs" as const,
       };
     });
+}
+
+// NASA EONET (Earth Observatory Natural Event Tracker) — free, no key, a second UN/US agency
+// independent of GDACS. Categories restricted to the ones relevant to a coastal resort; the
+// bounding box below is India + the Arabian Sea/Bay of Bengal, generous enough to catch a
+// cyclone still forming offshore before it makes landfall near the property.
+const EONET_URL = "https://eonet.gsfc.nasa.gov/api/v3/events?status=open&category=severeStorms,floods,wildfires&limit=40";
+const EONET_BBOX = { lat: [4, 32] as [number, number], lon: [60, 92] as [number, number] };
+
+async function fetchEonet(): Promise<HazardEvent[]> {
+  const res = await fetch(EONET_URL, { signal: AbortSignal.timeout(8000) });
+  if (!res.ok) throw new Error(`eonet ${res.status}`);
+  const data = (await res.json()) as { events?: { id: string; title: string; categories?: { title: string }[]; sources?: { url: string }[]; geometry?: { date: string; coordinates: number[] }[] }[] };
+  const out: HazardEvent[] = [];
+  for (const ev of data.events ?? []) {
+    const g = ev.geometry?.[ev.geometry.length - 1];
+    if (!g?.coordinates || g.coordinates.length < 2) continue;
+    const [lon, lat] = g.coordinates;
+    if (lat < EONET_BBOX.lat[0] || lat > EONET_BBOX.lat[1] || lon < EONET_BBOX.lon[0] || lon > EONET_BBOX.lon[1]) continue;
+    out.push({
+      id: `eonet-${ev.id}`,
+      name: ev.title,
+      eventType: ev.categories?.[0]?.title ?? "Severe weather",
+      alertLevel: "Orange",
+      lat,
+      lon,
+      url: ev.sources?.[0]?.url ?? "https://eonet.gsfc.nasa.gov",
+      fromDate: g.date,
+      provider: "eonet",
+    });
+  }
+  return out.slice(0, 15);
 }
 
 /** Best-effort only: undocumented Trends internal API (what `pytrends` wraps), always isolated
@@ -170,6 +207,28 @@ async function fetchGoogleTrends(): Promise<number | null> {
   return points[points.length - 1].value[0] ?? null;
 }
 
+// Feature B — a free, keyless proxy for "is regional air travel disrupted right now": OpenSky
+// Network's public /states/all endpoint returns live aircraft positions with no auth for a
+// bounding box. It cannot report scheduled-vs-actual delay directly (that needs a paid
+// schedule API), so this uses the honest proxy every ops team already watches informally —
+// aircraft actually present near the two regional airports right now, against a baseline —
+// rather than pretending to have delay data this project doesn't have access to.
+const AIRPORT_BBOX = { lamin: 14.9, lomin: 73.4, lamax: 15.9, lomax: 74.4 }; // Dabolim + Mopa, Goa
+const OPENSKY_URL = `https://opensky-network.org/api/states/all?lamin=${AIRPORT_BBOX.lamin}&lomin=${AIRPORT_BBOX.lomin}&lamax=${AIRPORT_BBOX.lamax}&lomax=${AIRPORT_BBOX.lomax}`;
+export interface AviationActivity {
+  aircraftNearby: number;
+  belowNormal: boolean;
+}
+const AVIATION_BASELINE = 4; // typical live aircraft count over this bounding box on a clear day, observed during testing
+
+async function fetchAviationActivity(): Promise<AviationActivity> {
+  const res = await fetch(OPENSKY_URL, { signal: AbortSignal.timeout(8000) });
+  if (!res.ok) throw new Error(`opensky ${res.status}`);
+  const data = (await res.json()) as { states?: unknown[][] | null };
+  const n = data.states?.length ?? 0;
+  return { aircraftNearby: n, belowNormal: n < AVIATION_BASELINE * 0.4 };
+}
+
 export async function GET() {
   if (cache && Date.now() - cache.fetchedAt < CACHE_TTL_MS) {
     return NextResponse.json({ ok: true, ...cache, cached: true });
@@ -178,19 +237,21 @@ export async function GET() {
   const newsApiKey = process.env.NEWS_API_KEY;
   const gnewsKey = process.env.GNEWS_API_KEY;
 
-  const [reddit, bluesky, mastodon, newsapi, gnews, gdacs, trends] = await Promise.allSettled([
+  const [reddit, bluesky, mastodon, newsapi, gnews, gdacs, eonet, trends, aviation] = await Promise.allSettled([
     fetchReddit(),
     fetchBluesky(),
     fetchMastodon(),
     newsApiKey ? fetchNewsApi(newsApiKey) : Promise.resolve<SocialSignalItem[]>([]),
     gnewsKey ? fetchGNews(gnewsKey) : Promise.resolve<SocialSignalItem[]>([]),
     fetchGdacs(),
+    fetchEonet(),
     fetchGoogleTrends(),
+    fetchAviationActivity(),
   ]);
 
   const settle = <T,>(r: PromiseSettledResult<T[]>) => (r.status === "fulfilled" ? r.value : []);
   const items = [...settle(reddit), ...settle(bluesky), ...settle(mastodon), ...settle(newsapi), ...settle(gnews)].sort((a, b) => b.publishedAt - a.publishedAt).slice(0, 24);
-  const hazards = settle(gdacs);
+  const hazards = [...settle(gdacs), ...settle(eonet)];
   const trendScore = trends.status === "fulfilled" ? trends.value : null;
 
   const sources = {
@@ -200,6 +261,8 @@ export async function GET() {
     newsapi: newsApiKey ? newsapi.status === "fulfilled" : false,
     gnews: gnewsKey ? gnews.status === "fulfilled" : false,
     gdacs: gdacs.status === "fulfilled",
+    eonet: eonet.status === "fulfilled",
+    aviation: aviation.status === "fulfilled",
     trends: trends.status === "fulfilled" && trendScore !== null,
   };
 
@@ -207,6 +270,7 @@ export async function GET() {
     return NextResponse.json({ ok: false, reason: "no-live-source-reachable" }, { status: 503 });
   }
 
-  cache = { items, hazards, trendScore, sources, fetchedAt: Date.now() };
+  const aviationActivity = aviation.status === "fulfilled" ? aviation.value : null;
+  cache = { items, hazards, trendScore, sources, aviationActivity, fetchedAt: Date.now() };
   return NextResponse.json({ ok: true, ...cache, cached: false });
 }

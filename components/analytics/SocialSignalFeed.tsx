@@ -1,9 +1,9 @@
 "use client";
 
 import { useMemo } from "react";
-import { Newspaper, Rss, MessageCircle, AtSign, ShieldAlert, TrendingUp } from "lucide-react";
+import { Newspaper, Rss, MessageCircle, AtSign, ShieldAlert, TrendingUp, Plane } from "lucide-react";
 import { useSim } from "@/store/sim";
-import { getSocialSignals, getHazardEvents, getTrendScore, getSignalSources, socialSignalsSource, publicConcernScore, getSignalAnalysis, disruptionScore } from "@/lib/intelligence/socialSignals";
+import { getSocialSignals, getHazardEvents, getTrendScore, getSignalSources, socialSignalsSource, publicConcernScore, getSignalAnalysis, disruptionScore, socialTriggerState, getAviationActivity } from "@/lib/intelligence/socialSignals";
 import type { SignalSource } from "@/app/api/social-weather-signals/route";
 import { cn } from "@/lib/utils";
 
@@ -62,6 +62,8 @@ export function SocialSignalFeed() {
   const concern = publicConcernScore();
   const analysis = getSignalAnalysis();
   const disruption = disruptionScore();
+  const trigger = socialTriggerState();
+  const aviation = getAviationActivity();
 
   const gaugeColor = concern > 0.6 ? "#f4436c" : concern > 0.3 ? "#f5a524" : "#34d399";
   const circumference = 2 * Math.PI * 26;
@@ -96,6 +98,14 @@ export function SocialSignalFeed() {
         </div>
       </div>
 
+      {trigger.triggered && (
+        <div className="flex items-center gap-2 rounded-lg border border-[#f4436c]/40 bg-[#f4436c]/10 px-3 py-2">
+          <ShieldAlert size={14} className="text-[#f4436c]" />
+          <span className="text-[11px] leading-relaxed text-hi">
+            <b>Trigger fired:</b> disruption chatter burst +{Math.round(trigger.burstRate * 100)} pts, corroborated by {trigger.corroboratingProviders} official agenc{trigger.corroboratingProviders === 1 ? "y" : "ies"} — a recommendation is queued on the Command Center.
+          </span>
+        </div>
+      )}
       {analysis && (
         <div className="flex flex-wrap items-center gap-2 rounded-lg border border-stroke bg-white/[0.02] px-3 py-2">
           <span className="mono text-[9.5px] uppercase tracking-wider text-low">Traveller-impact reading</span>
@@ -104,6 +114,15 @@ export function SocialSignalFeed() {
           </span>
           <span className="mono ml-auto text-[10.5px] text-mid">
             disruption <span className={cn("font-semibold", disruption > 0.5 ? "text-critical" : disruption > 0.25 ? "text-warm" : "text-positive")}>{(disruption * 100).toFixed(0)}%</span> → feeds the twin&rsquo;s complaint and front-desk load
+          </span>
+        </div>
+      )}
+
+      {aviation && (
+        <div className={cn("flex items-center gap-2 rounded-lg border px-3 py-2", aviation.belowNormal ? "border-[#f5a524]/40 bg-[#f5a524]/10" : "border-stroke bg-white/[0.02]")}>
+          <Plane size={13} className={aviation.belowNormal ? "text-[#f5a524]" : "text-mid"} />
+          <span className="text-[11px] text-mid">
+            <b className={aviation.belowNormal ? "text-[#f5a524]" : "text-hi"}>{aviation.aircraftNearby} aircraft</b> live over the regional airports (OpenSky, no key) — {aviation.belowNormal ? "well below normal, consistent with disrupted air travel" : "normal traffic"}.
           </span>
         </div>
       )}

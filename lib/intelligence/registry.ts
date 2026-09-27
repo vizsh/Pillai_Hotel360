@@ -10,6 +10,7 @@ import { energyRecommendations } from "./energy";
 import { groupBlockRecommendations } from "./groupBlocks";
 import { guestRecoveryRecommendations } from "./guestRecovery";
 import { weatherRecommendations } from "./weather";
+import { socialTriggerRecommendations } from "./socialTrigger";
 
 export const moduleMeta: Record<ModuleId, { label: string; short: string; color: string; description: string; method: string }> = {
   maintenance: { label: "Predictive Maintenance", short: "MAINT", color: "#f4436c", description: "Survival models on asset telemetry surface failures before a guest notices one.", method: "Weibull hazard + telemetry anomaly z-scores" },
@@ -40,5 +41,6 @@ export function runModules(state: SimState, model: ResortModel): Recommendation[
     ...groupBlockRecommendations(state, model),
     ...guestRecoveryRecommendations(state, model),
     ...weatherRecommendations(state, model),
+    ...socialTriggerRecommendations(state, model),
   ];
 }

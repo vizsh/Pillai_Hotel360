@@ -76,6 +76,52 @@ Four switchable layers: **Satellite IR** (cloud-top colour ramp), **Temperature*
 
 Leaflet with an OpenStreetMap base, RainViewer live radar (capped at native zoom 7), GDACS events at reported coordinates, regional airports, city and beaches, and an impact ripple paced by the current condition. If radar is unreachable the map keeps its base layer.
 
+## 8 · Social signal as a trigger, not just a nudge
+
+A single post is never enough to act on. `lib/intelligence/socialTrigger.ts` tracks the disruption
+score across successive polls and fires a real recommendation — not a background nudge — only when
+**both** gates clear, the same two-factor discipline the CCTV persistence gate uses:
+
+- **Burst** — the disruption score has risen at least 12 points over its own recent baseline (not
+  just "is currently high"), computed from a rolling history in `socialSignals.ts`.
+- **Corroboration** — at least one independent official agency (GDACS or NASA EONET — two different
+  agencies, not one asked twice) reports a matching event in the region.
+
+Once triggered, `rec-social-trigger` appears in the normal recommendation queue with the leading
+post, the corroborating event, and a **derived what-if scenario** (via `scenarioParse.ts`) ready to
+open on the what-if panel — because social reports can lead an official forecast update by hours.
+
+**NASA EONET** (`fetchEonet` in `app/api/social-weather-signals/route.ts`) is a free, keyless second
+agency alongside GDACS, restricted to categories relevant to a coastal resort (severe storms, floods,
+wildfires) within a South Asia bounding box.
+
+**OpenSky Network** (`fetchAviationActivity`) is a free, keyless live-aircraft feed over the two
+regional airports — an honest proxy for "is regional air travel disrupted right now" (it cannot
+report scheduled-vs-actual delay, which needs a paid schedule API; live aircraft count well below
+the observed baseline is the signal actually used).
+
+**Guest complaints close the loop the other way.** Real complaints arriving through the guest-app
+bridge (`source: "guest-app"`, `type: "complaint"`) are scanned each tick for weather-linked language
+(leak, flooding, AC not cooling, power cut); the count feeds back into the same `publicConcernScore()`
+every badge, the cascade and the assistants already read — a second, internal evidence channel
+alongside the external social/news sources.
+
+## 9 · Weather-aware staffing, playbooks and a quantified exposure figure
+
+- **Staffing bias (Feature A).** `forecastDemand()` in `staffing.ts` now reads the same
+  `weatherDemandProfile` the tick and the what-if already use — a rain day shifts department demand
+  toward indoor F&B and spa, so the roster solver is solved against *today's* weather, not a weather-
+  blind baseline.
+- **Playbook + one-click prepare (Feature C).** `weatherPlaybook.ts` maps the forecast to a named
+  checklist (monsoon/storm, heatwave) and bundles every currently pending weather/staffing/energy
+  recommendation; "Prepare the resort" on the Weather Twin page runs each through the exact same
+  `acceptRecommendation()` any other Accept button calls — a bundle of real actions, not a new one.
+- **Quantified exposure (Feature E).** The Ops Assistant's weather briefing (`composeWeatherBriefing`
+  in `lib/ai/composers.ts`) now includes a modeled ₹ operating-exposure line built from the same
+  what-if bands already shown — uncovered shifts × an illustrative labour cost, plus extra HVAC risk
+  × an illustrative reactive-repair cost (the same 3–5× benchmark cited elsewhere) — shown only when
+  the exposure is non-trivial, both unit costs labelled illustrative.
+
 ## Files
 
 `app/api/weather` · `app/api/social-weather-signals` · `lib/intelligence/{weather,weatherImpact,weatherWhatIf,socialSignals}.ts` · `components/analytics/{WeatherTwinPage,RegionalWeatherMap,SocialSignalFeed,WeatherImpactMap}.tsx` · `components/command/WeatherTwinPanel.tsx` · `components/twin/WeatherFX.tsx` · `tests/intelligence/weatherWhatIf.test.ts`. Every API and its failure behaviour: [API_CATALOG.md](API_CATALOG.md).

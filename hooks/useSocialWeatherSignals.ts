@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect } from "react";
-import { setSocialSignals, setSignalAnalysis } from "@/lib/intelligence/socialSignals";
-import type { SocialSignalItem, HazardEvent } from "@/app/api/social-weather-signals/route";
+import { setSocialSignals, setSignalAnalysis, recordDisruptionSample } from "@/lib/intelligence/socialSignals";
+import type { SocialSignalItem, HazardEvent, AviationActivity } from "@/app/api/social-weather-signals/route";
 
 const POLL_INTERVAL_MS = 20 * 60 * 1000;
 
@@ -18,15 +18,20 @@ async function analyse(items: SocialSignalItem[]) {
     setSignalAnalysis(data.ok && data.analysis ? { analysis: data.analysis, provider: data.provider ?? "rules", model: data.model ?? "" } : null);
   } catch {
     setSignalAnalysis(null);
+  } finally {
+    // Recorded here, after analysis lands, so the burst/corroboration trigger (socialTriggerState)
+    // always samples the disruption score with the freshest classification, not a stale one.
+    recordDisruptionSample();
   }
 }
 
 async function poll() {
   try {
     const res = await fetch("/api/social-weather-signals", { cache: "no-store" });
-    const data = (await res.json()) as { ok: boolean; items?: SocialSignalItem[]; hazards?: HazardEvent[]; trendScore?: number | null; sources?: Record<string, boolean> };
-    setSocialSignals(data.ok ? { items: data.items ?? [], hazards: data.hazards ?? [], trendScore: data.trendScore ?? null, sources: data.sources ?? {} } : null);
+    const data = (await res.json()) as { ok: boolean; items?: SocialSignalItem[]; hazards?: HazardEvent[]; trendScore?: number | null; sources?: Record<string, boolean>; aviationActivity?: AviationActivity | null };
+    setSocialSignals(data.ok ? { items: data.items ?? [], hazards: data.hazards ?? [], trendScore: data.trendScore ?? null, sources: data.sources ?? {}, aviationActivity: data.aviationActivity ?? null } : null);
     if (data.ok && data.items?.length) void analyse(data.items);
+    else recordDisruptionSample();
   } catch {
     setSocialSignals(null);
   }

@@ -13,11 +13,15 @@ import { FATIGUE_BASE_ACCRUAL, FATIGUE_OVERLOAD_ACCRUAL, FATIGUE_RECOVERY_RATE, 
 import { forecastWeather, type WeatherDay } from "@/lib/intelligence/weather";
 import { weatherDemandProfile } from "@/lib/intelligence/weatherImpact";
 import { PRIOR_SLOPE, beliefSlope, observe } from "@/lib/intelligence/weatherLearner";
-import { publicConcernScore, disruptionScore } from "@/lib/intelligence/socialSignals";
+import { publicConcernScore, disruptionScore, setGuestWeatherComplaintSignal } from "@/lib/intelligence/socialSignals";
 
 let counter = 1;
 let rand: Rand = mulberry32(1);
 let randSeed = -1;
+
+// Feature D: which open, guest-app-sourced complaints count as a real weather-linked signal
+// feeding back into publicConcernScore() (lib/intelligence/socialSignals.ts).
+const WEATHER_COMPLAINT_RE = /(leak|leaking|flood|flooded|water(ing)?\s?(in|coming)|damp|monsoon|storm|rain|not cooling|ac (not|isn.?t) working|too hot|heat(wave)?|power (cut|outage)|blackout)/i;
 
 export function nextId(prefix: string) {
   return `${prefix}-${(counter++).toString(36)}`;
@@ -327,8 +331,10 @@ export function tick(state: SimState, model: ResortModel, dtMin: number, weather
     }
   }
 
+  let guestWeatherComplaints = 0;
   for (const req of Object.values(state.requests)) {
     if (req.status === "done") continue;
+    if (req.type === "complaint" && req.source === "guest-app" && WEATHER_COMPLAINT_RE.test(req.text)) guestWeatherComplaints++;
     if (req.status === "open") {
       const { dept, skill } = deptFor(req);
       dispatchStaff(state, model, req, dept, skill);
@@ -337,6 +343,7 @@ export function tick(state: SimState, model: ResortModel, dtMin: number, weather
       }
     }
   }
+  setGuestWeatherComplaintSignal(guestWeatherComplaints);
 
   const hkOnDuty = Object.values(state.staff).filter((s) => s.dept === "housekeeping" && s.status !== "off").length;
   const hkDirty = rooms.filter((r) => r.status === "vacant-dirty").length;

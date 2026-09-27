@@ -10,6 +10,7 @@ import { WeatherImpactMap } from "./WeatherImpactMap";
 import { SocialSignalFeed } from "./SocialSignalFeed";
 import { CascadeGraph } from "./CascadeGraph";
 import { CalibrationCard } from "./CalibrationCard";
+import { PlaybookCard } from "./PlaybookCard";
 import { beliefSlope } from "@/lib/intelligence/weatherLearner";
 import type { WeatherScenarioInput, WeatherWhatIfResult } from "@/lib/intelligence/weatherWhatIf";
 import { cn } from "@/lib/utils";
@@ -72,6 +73,8 @@ export function WeatherTwinPage() {
           <SocialSignalFeed />
         </div>
       </div>
+
+      <PlaybookCard />
 
       {whatIf && <CascadeGraph scenario={whatIf.scenario} result={whatIf.result} fnbSlope={beliefSlope(state)} />}
       <CalibrationCard />

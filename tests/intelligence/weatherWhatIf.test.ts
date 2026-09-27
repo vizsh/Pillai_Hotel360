@@ -48,3 +48,19 @@ describe("runWeatherWhatIf", () => {
     }
   });
 });
+
+describe("weather-linked staffing bias (feature A)", () => {
+  it("raises modeled F&B demand on a rain day and lowers it for spa vs a clear day", async () => {
+    const { forecastDemand } = await import("@/lib/intelligence/staffing");
+    const { setLiveWeather } = await import("@/lib/intelligence/weather");
+    const { makeState } = await import("../helpers");
+    const { state, model } = makeState("peak-season", 7);
+    setLiveWeather([{ dayOffset: 0, tempC: 27, rainProbability: 0.9 }]);
+    const rainy = forecastDemand(state, model);
+    setLiveWeather([{ dayOffset: 0, tempC: 28, rainProbability: 0.05 }]);
+    const clear = forecastDemand(state, model);
+    setLiveWeather(null);
+    const hour = 13; // inside both profiles' active window
+    expect(rainy[hour].demand.fnb).toBeGreaterThan(clear[hour].demand.fnb);
+  });
+});
