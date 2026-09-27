@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import { setSocialSignals } from "@/lib/intelligence/socialSignals";
-import type { SocialSignalItem } from "@/app/api/social-weather-signals/route";
+import type { SocialSignalItem, HazardEvent } from "@/app/api/social-weather-signals/route";
 
 const POLL_INTERVAL_MS = 20 * 60 * 1000;
 
@@ -13,8 +13,8 @@ let started = false;
 async function poll() {
   try {
     const res = await fetch("/api/social-weather-signals", { cache: "no-store" });
-    const data = (await res.json()) as { ok: boolean; items?: SocialSignalItem[] };
-    setSocialSignals(data.ok && data.items ? data.items : null);
+    const data = (await res.json()) as { ok: boolean; items?: SocialSignalItem[]; hazards?: HazardEvent[]; trendScore?: number | null; sources?: Record<string, boolean> };
+    setSocialSignals(data.ok ? { items: data.items ?? [], hazards: data.hazards ?? [], trendScore: data.trendScore ?? null, sources: data.sources ?? {} } : null);
   } catch {
     setSocialSignals(null);
   }

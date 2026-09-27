@@ -1,7 +1,10 @@
 "use client";
 
+import { useMemo } from "react";
+import { Newspaper, Rss, MessageCircle, AtSign, ShieldAlert, TrendingUp } from "lucide-react";
 import { useSim } from "@/store/sim";
-import { getSocialSignals, socialSignalsSource, publicConcernScore } from "@/lib/intelligence/socialSignals";
+import { getSocialSignals, getHazardEvents, getTrendScore, getSignalSources, socialSignalsSource, publicConcernScore } from "@/lib/intelligence/socialSignals";
+import type { SignalSource } from "@/app/api/social-weather-signals/route";
 import { cn } from "@/lib/utils";
 
 function timeAgo(ms: number): string {
@@ -11,49 +14,151 @@ function timeAgo(ms: number): string {
   return hrs < 24 ? `${hrs}h ago` : `${Math.round(hrs / 24)}d ago`;
 }
 
-/** Real-World Social Signal Integration (mandatory requirement 3): every row here is a real
- * post/article fetched live from Reddit's public search (no key) and, if configured, GNews
- * (app/api/social-weather-signals) — nothing here is written by the simulator. The concern
- * score is a coarse keyword hit-rate over these exact titles (lib/intelligence/socialSignals.ts),
- * not a separate invented number, and it's the same score that nudges the organic request mix
- * in lib/sim/engine.ts — this feed is an input to the twin, not just a decoration next to it. */
+const SOURCE_META: Record<SignalSource, { label: string; icon: typeof Rss; color: string }> = {
+  reddit: { label: "Reddit", icon: Rss, color: "#ff5700" },
+  bluesky: { label: "Bluesky", icon: AtSign, color: "#1185fe" },
+  mastodon: { label: "Mastodon", icon: MessageCircle, color: "#6364ff" },
+  newsapi: { label: "NewsAPI", icon: Newspaper, color: "#2dd4bf" },
+  gnews: { label: "GNews", icon: Newspaper, color: "#34d399" },
+};
+
+const ALERT_COLOR: Record<string, string> = { Red: "#f4436c", Orange: "#f5a524", Green: "#34d399" };
+
+const THEME_KEYWORDS: [string, string[]][] = [
+  ["flood", ["flood", "waterlog", "landslide"]],
+  ["storm", ["storm", "cyclone", "monsoon", "rain"]],
+  ["heat", ["heatwave", "heat wave", "hot"]],
+  ["travel", ["flight", "airport", "travel", "tourist", "cancel"]],
+];
+function themeOf(title: string): string | null {
+  const lower = title.toLowerCase();
+  for (const [theme, kws] of THEME_KEYWORDS) if (kws.some((k) => lower.includes(k))) return theme;
+  return null;
+}
+
+/** Real-World Social Signal Integration (mandatory requirement 3): every row/pill here is a
+ * real post/article/official-alert fetched live (app/api/social-weather-signals) — seven
+ * independent sources, each shown honestly as live or not-reachable rather than blended into
+ * one status flag. The concern gauge and the request-mix nudge in lib/sim/engine.ts read the
+ * exact same blended score computed in lib/intelligence/socialSignals.ts. */
 export function SocialSignalFeed() {
   useSim((s) => s.version); // re-render on the sim's own poll tick, same as any live-data card
   const items = getSocialSignals();
+  const hazards = getHazardEvents();
+  const trendScore = getTrendScore();
+  const sources = getSignalSources();
   const live = socialSignalsSource() === "live";
   const concern = publicConcernScore();
 
+  const gaugeColor = concern > 0.6 ? "#f4436c" : concern > 0.3 ? "#f5a524" : "#34d399";
+  const circumference = 2 * Math.PI * 26;
+  const dash = circumference * concern;
+
+  const tickerItems = useMemo(() => (items.length ? [...items, ...items] : []), [items]);
+
   return (
-    <div className="flex flex-col gap-2 rounded-xl border border-stroke bg-deep/70 p-4">
+    <div className="flex flex-col gap-3 rounded-xl border border-stroke bg-deep/70 p-4">
       <div className="flex items-center justify-between">
         <span className="font-display text-[14.5px] font-semibold text-hi">Live traveler &amp; public signal</span>
-        <span className={cn("mono rounded px-1.5 py-0.5 text-[9.5px] uppercase tracking-wider", live ? "bg-positive/15 text-positive" : "bg-white/5 text-low")}>{live ? "live · reddit + gnews" : "no live source reachable"}</span>
+        <span className={cn("mono rounded px-1.5 py-0.5 text-[9.5px] uppercase tracking-wider", live ? "bg-positive/15 text-positive" : "bg-white/5 text-low")}>{live ? "live" : "no live source"}</span>
       </div>
-      <p className="text-[11px] leading-relaxed text-mid">Real public posts/articles mentioning weather conditions in the resort&rsquo;s region — feeds a coarse &ldquo;public concern&rdquo; score that nudges the twin&rsquo;s own request mix (a higher concern reading shifts demand further toward front-desk/complaint-leaning requests, on top of the base weather effect).</p>
 
-      {!live && <p className="rounded-lg border border-stroke bg-white/[0.02] p-3 text-center text-[11px] text-low">Reddit/GNews unreachable right now — showing nothing rather than fabricating posts. Retries automatically every 20 minutes.</p>}
-
-      {live && (
-        <div className="flex items-center justify-between rounded-lg border border-warm/30 bg-warm/5 px-3 py-2">
-          <span className="text-[11px] text-hi">Public concern score</span>
-          <span className="mono text-[13px] font-medium text-warm">{(concern * 100).toFixed(0)}%</span>
+      <div className="flex items-center gap-4">
+        <div className="relative h-16 w-16 shrink-0">
+          <svg viewBox="0 0 64 64" className="h-16 w-16 -rotate-90">
+            <circle cx={32} cy={32} r={26} fill="none" stroke="#1c232e" strokeWidth={5} />
+            <circle cx={32} cy={32} r={26} fill="none" stroke={gaugeColor} strokeWidth={5} strokeLinecap="round" strokeDasharray={`${dash} ${circumference}`} style={{ transition: "stroke-dasharray 0.6s ease" }} />
+          </svg>
+          <div className="absolute inset-0 grid place-items-center">
+            <span className="mono text-[13px] font-semibold text-hi">{(concern * 100).toFixed(0)}%</span>
+          </div>
         </div>
-      )}
+        <div className="flex flex-1 flex-col gap-1">
+          <span className="text-[11px] text-mid">Public concern — blends live post/article keyword rate, any open official hazard alert, and Google Trends search interest.</span>
+          {trendScore !== null && (
+            <span className="mono flex items-center gap-1 text-[10px] text-low">
+              <TrendingUp size={11} /> Search interest: {trendScore}/100 (Google Trends, Goa region)
+            </span>
+          )}
+        </div>
+      </div>
 
-      {items.length > 0 && (
-        <div className="scrollbar-thin flex max-h-[260px] flex-col gap-1.5 overflow-y-auto">
-          {items.map((it) => (
-            <a key={it.id} href={it.url} target="_blank" rel="noopener noreferrer" className="flex items-start justify-between gap-2 rounded-lg border border-stroke bg-white/[0.015] px-3 py-2 hover:border-white/20">
-              <div className="min-w-0">
-                <div className="truncate text-[11.5px] text-hi">{it.title}</div>
-                <div className="mono mt-0.5 text-[9.5px] text-low">
-                  {it.source} · {timeAgo(it.publishedAt)}
-                </div>
-              </div>
+      <div className="flex flex-wrap gap-1.5">
+        {(Object.keys(SOURCE_META) as SignalSource[]).map((s) => (
+          <span key={s} className={cn("mono flex items-center gap-1 rounded px-1.5 py-0.5 text-[9.5px]", sources[s] ? "bg-positive/10 text-positive" : "bg-white/[0.03] text-low")}>
+            <span className="h-1.5 w-1.5 rounded-full" style={{ background: sources[s] ? SOURCE_META[s].color : "#3a4150" }} />
+            {SOURCE_META[s].label}
+          </span>
+        ))}
+        <span className={cn("mono flex items-center gap-1 rounded px-1.5 py-0.5 text-[9.5px]", sources.gdacs ? "bg-positive/10 text-positive" : "bg-white/[0.03] text-low")}>
+          <ShieldAlert size={10} /> GDACS
+        </span>
+        <span className={cn("mono flex items-center gap-1 rounded px-1.5 py-0.5 text-[9.5px]", sources.trends ? "bg-positive/10 text-positive" : "bg-white/[0.03] text-low")}>
+          <TrendingUp size={10} /> Trends
+        </span>
+      </div>
+
+      {hazards.length > 0 && (
+        <div className="flex flex-col gap-1.5 rounded-lg border border-warm/30 bg-warm/5 p-2.5">
+          <span className="mono flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-warm">
+            <ShieldAlert size={12} /> Official hazard alerts (GDACS)
+          </span>
+          {hazards.slice(0, 3).map((h) => (
+            <a key={h.id} href={h.url} target="_blank" rel="noopener noreferrer" className="flex items-center justify-between gap-2 rounded-md bg-black/20 px-2 py-1.5 hover:bg-black/30">
+              <span className="truncate text-[11px] text-hi">{h.name}</span>
+              <span className="mono shrink-0 rounded px-1.5 py-0.5 text-[9px]" style={{ background: `${ALERT_COLOR[h.alertLevel] ?? "#7a8494"}22`, color: ALERT_COLOR[h.alertLevel] ?? "#7a8494" }}>
+                {h.alertLevel}
+              </span>
             </a>
           ))}
         </div>
       )}
+
+      {!live && items.length === 0 && hazards.length === 0 && <p className="rounded-lg border border-stroke bg-white/[0.02] p-3 text-center text-[11px] text-low">No live source reachable right now — showing nothing rather than fabricating posts. Retries automatically every 20 minutes.</p>}
+
+      {tickerItems.length > 0 && (
+        <div className="group relative overflow-hidden rounded-lg border border-stroke bg-black/20 py-1.5">
+          <div className="ticker-track flex w-max gap-8 whitespace-nowrap px-3 group-hover:[animation-play-state:paused]">
+            {tickerItems.map((it, i) => {
+              const meta = SOURCE_META[it.source];
+              const Icon = meta.icon;
+              return (
+                <span key={`${it.id}-${i}`} className="flex items-center gap-1.5 text-[11px] text-mid">
+                  <Icon size={11} color={meta.color} />
+                  {it.title}
+                </span>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {items.length > 0 && (
+        <div className="scrollbar-thin flex max-h-[220px] flex-col gap-1.5 overflow-y-auto">
+          {items.map((it) => {
+            const meta = SOURCE_META[it.source];
+            const Icon = meta.icon;
+            const theme = themeOf(it.title);
+            return (
+              <a key={it.id} href={it.url} target="_blank" rel="noopener noreferrer" className="flex items-start justify-between gap-2 rounded-lg border border-stroke bg-white/[0.015] px-3 py-2 hover:border-white/20">
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-[11.5px] text-hi">{it.title}</div>
+                  <div className="mono mt-0.5 flex items-center gap-1.5 text-[9.5px] text-low">
+                    <Icon size={10} color={meta.color} />
+                    {meta.label} · {timeAgo(it.publishedAt)}
+                    {theme && <span className="rounded bg-white/[0.06] px-1 py-0.5 text-[8.5px] uppercase tracking-wider text-mid">{theme}</span>}
+                  </div>
+                </div>
+              </a>
+            );
+          })}
+        </div>
+      )}
+
+      <style>{`
+        .ticker-track { animation: ticker-scroll 28s linear infinite; }
+        @keyframes ticker-scroll { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+      `}</style>
     </div>
   );
 }

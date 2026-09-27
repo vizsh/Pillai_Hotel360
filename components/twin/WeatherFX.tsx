@@ -4,11 +4,8 @@ import { useEffect, useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { useTwin } from "@/store/twin";
-import { useSim } from "@/store/sim";
-import { useWeatherWhatIf } from "@/store/weatherWhatIf";
 import { getModel } from "@/lib/architecture/model";
-import { forecastWeather } from "@/lib/intelligence/weather";
-import type { WeatherCondition } from "@/lib/intelligence/weather";
+import { useCurrentWeatherCondition } from "@/hooks/useCurrentWeatherCondition";
 
 const RAIN_HEIGHT = 34;
 const RAIN_SPEED = 22;
@@ -17,18 +14,7 @@ const RAIN_SPEED = 22;
  * zone tint and lib/twin/colors.ts's room "weather" layer; this is the "grab attention
  * instantly" layer on top of it. Falling rain when the active/what-if condition is "rain", a
  * warm heat-haze color-grade when it's "heatwave" — both only rendered while the Weather layer
- * is selected, so every other layer's look is completely untouched. Every input is read
- * reactively (useSim's version tick, the what-if store's own fields), not via a one-off
- * getState() snapshot, so this actually re-renders when the day's weather advances or the
- * what-if scenario changes rather than only when the layer itself is toggled. */
-function useCurrentCondition(): WeatherCondition {
-  const wifActive = useWeatherWhatIf((s) => s.active);
-  const wifCondition = useWeatherWhatIf((s) => s.scenario.condition);
-  const simState = useSim((s) => s.state);
-  useSim((s) => s.version);
-  if (wifActive) return wifCondition;
-  return forecastWeather(simState)[0].condition;
-}
+ * is selected, so every other layer's look is completely untouched. */
 
 function Rain({ count = 900 }: { count?: number }) {
   const ref = useRef<THREE.Points>(null!);
@@ -102,7 +88,7 @@ function HeatHaze() {
 
 export function WeatherFX() {
   const activeLayer = useTwin((s) => s.activeLayer);
-  const condition = useCurrentCondition();
+  const condition = useCurrentWeatherCondition();
   if (activeLayer !== "weather" || condition === "clear") return null;
   if (condition === "rain") return <Rain />;
   return <HeatHaze />;

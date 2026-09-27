@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import dynamic from "next/dynamic";
 import { useSim } from "@/store/sim";
 import { forecastWeather, weatherSource } from "@/lib/intelligence/weather";
 import { AnalyticsShell, Card } from "./AnalyticsShell";
@@ -9,12 +10,19 @@ import { WeatherImpactMap } from "./WeatherImpactMap";
 import { SocialSignalFeed } from "./SocialSignalFeed";
 import { cn } from "@/lib/utils";
 
+// Leaflet touches `window`/`document` at import time, so it must never be part of the server
+// render — same reason components/twin/TwinCanvas.tsx dynamic-imports react-three-fiber.
+const RegionalWeatherMap = dynamic(() => import("./RegionalWeatherMap").then((m) => m.RegionalWeatherMap), { ssr: false, loading: () => <div className="grid h-[420px] place-items-center rounded-xl border border-stroke bg-deep/70 text-[12px] text-low">Loading regional map…</div> });
+
 /** HackCelestial 3.0 midnight task — Weather-Driven Digital Twin Enhancement. This page is the
  * one place all four mandatory pieces are visible together for a demo, but every one of them
  * is a real extension of the existing system, not a new standalone app:
  *  1. Live weather integration — forecastWeather()/weatherSource() (lib/intelligence/weather.ts)
  *     now actually drives the simulation tick (lib/sim/engine.ts), not only this card.
- *  2. Geospatial map — WeatherImpactMap renders the same real zone geometry the 3D twin and
+ *  2. Geospatial map — two complementary views: RegionalWeatherMap is a real lat/lng map (real
+ *     basemap, live RainViewer radar, real regional entities, real GDACS hazard events) at the
+ *     scale the brief's own "transportation, attraction demand" language describes; the
+ *     property-internal WeatherImpactMap renders the same real zone geometry the 3D twin and
  *     the surveillance heatmap use, tinted by the live weather's actual per-zone effect.
  *  3. Real-world social signal integration — SocialSignalFeed, real Reddit/GNews data, feeding
  *     a concern score back into the same simulation (lib/intelligence/socialSignals.ts).
@@ -48,10 +56,12 @@ export function WeatherTwinPage() {
         </div>
       </Card>
 
+      <RegionalWeatherMap />
+
       <div className="grid grid-cols-2 gap-4">
         <WeatherTwinPanel onResult={(_scenario, zm, narrative) => { setZoneMultiplier(zm); setConditionLabel(narrative); }} />
         <div className="flex flex-col gap-4">
-          <Card title="Geospatial impact map">
+          <Card title="Geospatial impact map (property zones)">
             <WeatherImpactMap zoneMultiplier={zoneMultiplier} conditionLabel={conditionLabel} />
           </Card>
           <SocialSignalFeed />
