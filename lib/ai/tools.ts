@@ -493,3 +493,33 @@ export function precomputeUserMath(message: string): string | null {
   }
   return lines.join("\n");
 }
+
+/** Deterministic routing of a question to the tools that answer it — used to pre-fetch live data so the
+ * model (Nugen-aligned or Ollama) reads facts instead of having to choose and call tools itself. Covers the
+ * original five lookup tools as well as the newer ones; the LLM's own tool-calling stays as a fallback. */
+export function routeTools(message: string, snapshot: OpsSnapshot): ToolCall[] {
+  const m = message.toLowerCase();
+  const calls: ToolCall[] = [];
+  const add = (name: string, args: Record<string, unknown> = {}) => {
+    if (!calls.some((c) => c.name === name && JSON.stringify(c.arguments) === JSON.stringify(args))) calls.push({ name, arguments: args });
+  };
+  const room = /\b(?:room|rm|suite)?\s*#?(\d{3})\b/.exec(m);
+  if (room && snapshot.rooms.some((r) => r.number === room[1])) add("find_room", { query: room[1] });
+  const named = snapshot.guests.find((g) => g.name.split(/\s+/).every((p) => p.length > 2 && m.includes(p.toLowerCase())));
+  if (named) {
+    add("find_room", { query: named.name });
+    add("list_planned_actions", { guestName: named.name });
+  }
+  if (/\bvips?\b/.test(m)) add("list_guests", { filter: "vip" });
+  if (/\b(planned|queued|planning|recommend|pending|lined up|what are we doing|next best)/.test(m)) add("list_planned_actions", /\bvips?\b/.test(m) ? { vipOnly: true } : {});
+  if (/\b(unhappy|dissatisf|angry|upset|complain|sentiment|satisfaction (is )?down|why is satisfaction)/.test(m)) {
+    add("list_guests", { filter: "unhappy" });
+    add("list_open_issues");
+  }
+  if (/\b(platinum|gold|silver)\b/.exec(m)) add("list_guests", { filter: /\b(platinum|gold|silver)\b/.exec(m)![1] });
+  if (/\b(sla|breach|overdue|late requests?)\b/.test(m)) add("list_open_issues", { onlyBreached: true });
+  else if (/\b(problem|issues?|attention|open requests?|needs? (my )?attention|going wrong|alerts?)\b/.test(m)) add("list_open_issues");
+  if (/\b(how is the resort|resort doing|kpi|summary|overview|occupancy|performance|satisfaction|today)\b/.test(m) && !/\b(revenue|revpar|adr|price|commission)\b/.test(m)) add("get_resort_summary");
+  for (const name of suggestTools(message)) if (name !== "calculate") add(name, name === "search_knowledge" ? { query: message } : {});
+  return calls;
+}

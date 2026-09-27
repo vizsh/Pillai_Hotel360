@@ -12,7 +12,11 @@
     "lint": "eslint",
     "test": "vitest run",
     "test:watch": "vitest",
-    "bot": "tsx --env-file=.env scripts/telegramBot.ts"
+    "bot": "tsx --env-file=.env scripts/telegramBot.ts",
+    "nugen:corpus": "tsx --tsconfig tsconfig.json scripts/nugen/build-corpus.ts",
+    "nugen:align": "tsx --tsconfig tsconfig.json --env-file=.env.local scripts/nugen/align.ts",
+    "nugen:status": "tsx --tsconfig tsconfig.json --env-file=.env.local scripts/nugen/status.ts",
+    "nugen:chat": "tsx --tsconfig tsconfig.json --env-file=.env.local scripts/nugen/chat.ts"
   },
   "dependencies": {
     "@react-spring/three": "^10.1.2",

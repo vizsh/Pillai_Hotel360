@@ -35,7 +35,7 @@ const intentColor: Record<string, string> = {
   unknown: "#5b6879",
 };
 
-type OllamaStatus = { reachable: boolean; chatModelPulled: boolean; embedModelPulled: boolean; models: string[] };
+type OllamaStatus = { reachable: boolean; chatModelPulled: boolean; embedModelPulled: boolean; models: string[]; provider?: "nugen" | "ollama" | "none"; nugen?: { configured: boolean; modelId: string | null; reachable: boolean | null }; fallback?: { model: string; ready: boolean } };
 
 export function ConciergePage() {
   const { state, mutate } = useSim();
@@ -150,7 +150,7 @@ export function ConciergePage() {
               <span className="text-[12px] text-mid">Ollama is running, but no chat model is pulled — run <code className="mono text-accent">ollama pull llama3.1:8b</code>.</span>
             ) : (
               <span className="text-[12px] text-mid">
-                Connected — chat model <span className="text-hi">llama3.1:8b</span>{ollama.embedModelPulled ? ", RAG retrieval active via nomic-embed-text" : " (no embed model pulled — replies skip retrieval)"}.
+                Connected — chat model <span className="text-hi">{ollama.provider === "nugen" ? `${ollama.nugen?.modelId} (Nugen-aligned, Ollama fallback)` : (ollama.fallback?.model ?? "llama3.1:8b")}</span>{ollama.embedModelPulled ? ", RAG retrieval active via nomic-embed-text" : " (no embed model pulled — replies skip retrieval)"}.
               </span>
             )}
           </div>

@@ -17,7 +17,7 @@ import { Button, Provenance } from "@/components/ui/primitives";
 import { Markdown } from "@/components/ui/Markdown";
 import { cn } from "@/lib/utils";
 
-type OllamaStatus = { reachable: boolean; chatModelPulled: boolean; embedModelPulled: boolean; models: string[] };
+type OllamaStatus = { reachable: boolean; chatModelPulled: boolean; embedModelPulled: boolean; models: string[]; provider?: "nugen" | "ollama" | "none"; nugen?: { configured: boolean; modelId: string | null; reachable: boolean | null }; fallback?: { model: string; ready: boolean } };
 
 interface AssistantMessage {
   id: string;
@@ -222,7 +222,7 @@ export function AssistantPage() {
 
   return (
     <AnalyticsShell title="Ops Assistant" subtitle="Ask anything about the live resort — who's in which room, what needs attention, guest lists — answered by a local Ollama model calling real tools against the current simulation, not a canned FAQ.">
-      <Card title="Local AI assistant (Ollama, tool-calling)" right={<Provenance kind="modeled" />}>
+      <Card title={ollama?.provider === "nugen" ? "AI assistant (Nugen-aligned model, Ollama fallback)" : "AI assistant (Ollama, Nugen-ready)"} right={<Provenance kind="modeled" />}>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <span className={cn("h-2 w-2 rounded-full", ollama === null ? "bg-low" : aiReady ? "bg-positive" : "bg-critical")} />
@@ -238,7 +238,15 @@ export function AssistantPage() {
               </span>
             ) : (
               <span className="text-[12px] text-mid">
-                Connected — <span className="text-hi">llama3.1:8b</span> with tool access to live rooms, guests, requests and KPIs.
+                {ollama.provider === "nugen" ? (
+                  <>
+                    <span className="rounded bg-accent/20 px-1.5 py-0.5 text-[10.5px] font-semibold text-accent">Nugen-aligned</span> <span className="text-hi">{ollama.nugen?.modelId}</span> — domain-aligned model with live data from rooms, guests, weather, signals and KPIs{ollama.fallback?.ready ? `; ${ollama.fallback.model} on Ollama is the automatic fallback.` : "."}
+                  </>
+                ) : (
+                  <>
+                    <span className="text-hi">{ollama.fallback?.model ?? "llama3.1:8b"}</span> via Ollama with live data from rooms, guests, weather, signals and KPIs{ollama.nugen?.configured ? " (Nugen model configured but not reachable — using the fallback)." : " (set NUGEN_API_KEY and NUGEN_MODEL_ID to use the Nugen-aligned model)."}
+                  </>
+                )}
               </span>
             )}
           </div>

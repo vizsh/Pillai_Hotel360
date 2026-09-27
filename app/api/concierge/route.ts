@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { getModel } from "@/lib/architecture/model";
 import { buildKnowledgeBase, type KnowledgeDoc } from "@/lib/ai/knowledge";
-import { chat, embed, OLLAMA_CHAT_MODEL, ollamaStatus } from "@/lib/ai/ollama";
+import { embed, chat } from "@/lib/ai/ollama";
+import { llmChat, llmStatus } from "@/lib/ai/llm";
 import { buildSystemPrompt, correctTierEligibility, GUARDRAIL_FALLBACK_REPLY, violatesGuardrails, type GuestPromptContext } from "@/lib/ai/conciergePrompt";
 import { retrieveTopK, type EmbeddedDoc } from "@/lib/ai/rag";
 
@@ -44,8 +45,7 @@ void getEmbeddedKnowledgeBase();
 void chat([{ role: "user", content: "Reply with OK." }]);
 
 export async function GET() {
-  const status = await ollamaStatus();
-  return NextResponse.json(status);
+  return NextResponse.json(await llmStatus());
 }
 
 export async function POST(req: Request) {
@@ -55,29 +55,31 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, reason: "invalid-request" }, { status: 400 });
   }
 
-  const status = await ollamaStatus();
-  if (!status.reachable) return NextResponse.json({ ok: false, reason: "ollama-unreachable" }, { status: 503 });
-  if (!status.chatModelPulled) return NextResponse.json({ ok: false, reason: "chat-model-missing", model: OLLAMA_CHAT_MODEL }, { status: 503 });
+  const status = await llmStatus();
+  if (status.provider === "none") return NextResponse.json({ ok: false, reason: "no-llm-available", nugen: status.nugen }, { status: 503 });
 
   const queryEmbedding = status.embedModelPulled ? await embed(message) : null;
   const knowledgeBase = status.embedModelPulled ? await getEmbeddedKnowledgeBase() : [];
   const retrieved = queryEmbedding && knowledgeBase.length ? retrieveTopK(queryEmbedding, knowledgeBase, TOP_K).filter((d) => d.score >= MIN_SCORE) : [];
 
   const systemPrompt = buildSystemPrompt(guest ?? null, retrieved);
-  const reply = await chat([
+  const answer = await llmChat([
     { role: "system", content: systemPrompt },
     { role: "user", content: message },
   ]);
+  const reply = answer?.content?.trim() || null;
+  const provider = answer?.provider ?? status.provider;
+  const model = answer?.model ?? "";
   if (!reply) return NextResponse.json({ ok: false, reason: "no-response" }, { status: 502 });
 
   if (violatesGuardrails(reply)) {
-    return NextResponse.json({ ok: true, reply: GUARDRAIL_FALLBACK_REPLY, model: OLLAMA_CHAT_MODEL, guardrailTripped: true, retrievedCount: retrieved.length });
+    return NextResponse.json({ ok: true, reply: GUARDRAIL_FALLBACK_REPLY, model, provider, guardrailTripped: true, retrievedCount: retrieved.length });
   }
 
   const tierCorrected = correctTierEligibility(reply, guest ?? null);
   if (tierCorrected) {
-    return NextResponse.json({ ok: true, reply: tierCorrected, model: OLLAMA_CHAT_MODEL, guardrailTripped: true, retrievedCount: retrieved.length });
+    return NextResponse.json({ ok: true, reply: tierCorrected, model, provider, guardrailTripped: true, retrievedCount: retrieved.length });
   }
 
-  return NextResponse.json({ ok: true, reply, model: OLLAMA_CHAT_MODEL, guardrailTripped: false, retrievedCount: retrieved.length });
+  return NextResponse.json({ ok: true, reply, model, provider, guardrailTripped: false, retrievedCount: retrieved.length });
 }
