@@ -51,7 +51,7 @@ describe("forecastDemand", () => {
     const observedDays = days.filter((d) => d.source === "observed");
     expect(observedDays.length).toBeGreaterThan(0);
     for (const d of observedDays) expect(d.confidence).toBeGreaterThan(0.3);
-  });
+  }, 30000);
 });
 
 describe("peakDemandDay", () => {

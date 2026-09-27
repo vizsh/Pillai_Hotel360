@@ -106,3 +106,19 @@ The surveillance layer (`/surveillance`, `lib/vision/*`) is not a separate app b
 | PMS / BMS / Camera analytics | **Contract only, honestly labeled as such** — `lib/adapters` proves the exact payload shape a real system would send, generated live from current state | `components/analytics/IntegrationsPage.tsx` |
 
 See [`AUTOMATION_AND_INTEGRATIONS.md`](AUTOMATION_AND_INTEGRATIONS.md) for how each of these actually works end to end.
+
+## AI layer (Nugen-aligned model, Ollama fallback)
+
+![Architecture with the AI layer](assets/architecture.png)
+
+The assistants sit in the intelligence stage and use the same shared state as every module: the client builds a snapshot of `SimState`, deterministic composers or routed tools fetch the relevant facts, and the model (Nugen-aligned first, Ollama automatically as fallback) writes the answer over them. A grounding gate rejects figures that are not in the data. See [AI_ASSISTANTS.md](AI_ASSISTANTS.md) and [NUGEN_INTEGRATION.md](NUGEN_INTEGRATION.md); the external feeds behind the weather twin are in [WEATHER_AND_SIGNALS.md](WEATHER_AND_SIGNALS.md) and [API_CATALOG.md](API_CATALOG.md).
+
+## Decision pipeline and user flows
+
+Every capability resolves through the same five-stage path — signal, score, gate, explain, act — and the persistence gate in stage three is what stops one noisy reading from becoming an alert.
+
+![Decision pipeline](assets/decision-pipeline.png)
+
+![Staff and admin flow](assets/staff-flow.png)
+
+![Guest flow](assets/guest-flow.png)

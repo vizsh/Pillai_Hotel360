@@ -1,227 +1,223 @@
+<div align="center">
+
 # Smart Resort 360
 
-AI-powered resort operations, guest experience, revenue and **CCTV surveillance intelligence** — delivered on a **live 3D digital twin** of the property.
+### One live, explainable 3D digital twin of a resort — twelve decision-science modules, real CCTV vision, weather-aware what-if simulation, and domain-aligned AI assistants (Nugen Intelligence).
 
-Built for PS ID 4 (Pillai Panvel hackathon). Every signal the resort produces lands on the building: room state, maintenance risk, sentiment, revenue, housekeeping load, energy, and — most recently — real computer vision over live CCTV-style test footage. Twelve intelligence modules turn that data into recommendations with confidence and basis, and accepting a recommendation dispatches it into operations where you can watch the consequence on the model.
+[![CI](https://github.com/vizsh/Pillai_Hotel360/actions/workflows/ci.yml/badge.svg)](https://github.com/vizsh/Pillai_Hotel360/actions/workflows/ci.yml)
+![Next.js](https://img.shields.io/badge/Next.js-16-black?logo=nextdotjs)
+![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=white)
+![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white)
+![Three.js](https://img.shields.io/badge/3D-React%20Three%20Fiber-000000?logo=threedotjs)
+![Tests](https://img.shields.io/badge/tests-270%2B%20passing-2ea44f)
+![AI](https://img.shields.io/badge/AI-Nugen%20aligned%20%2B%20Ollama%20fallback-C9932A)
+![Explainable](https://img.shields.io/badge/every%20number-explains%20itself-134E3A)
 
-## Documentation
+**HackCelestial 3.0 · Pillai University · Problem Statement 04 — AI-powered resort operations, guest experience, revenue and safety**
 
-This README covers running the project and what's real vs. simulated. For depth on any one part:
+[Quick start](#quick-start) · [What it does](#what-it-does) · [Architecture](#architecture) · [AI layer](#ai-layer-nugen-intelligence--ollama-fallback) · [Docs](#documentation) · [Honest scope](#what-is-real-modeled-and-simulated)
 
-| Doc | Covers |
-|---|---|
-| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | System diagrams, data flow, folder map, state/rendering model |
-| [`docs/INTELLIGENCE_MODELS.md`](docs/INTELLIGENCE_MODELS.md) | The actual math behind all 12 modules + 3 composite views |
-| [`docs/SURVEILLANCE.md`](docs/SURVEILLANCE.md) | The CCTV vision layer: real detection, calibrated heuristics, how it was debugged against real footage |
-| [`docs/AUTOMATION_AND_INTEGRATIONS.md`](docs/AUTOMATION_AND_INTEGRATIONS.md) | Autopilot, Automation Scenarios, Telegram bot, guest-app bridge, weather, integration contracts |
-| [`docs/PROBLEMS_AND_SOLUTIONS.md`](docs/PROBLEMS_AND_SOLUTIONS.md) | Real bugs found, root-caused and fixed — the reasoning, not just the diff |
-| [`docs/DIFFERENTIATORS.md`](docs/DIFFERENTIATORS.md) | What to actually check for as a judge, and where it's demonstrated |
+</div>
 
-## Run
+<p align="center"><img src="docs/assets/landing.jpg" alt="Smart Resort 360 landing page with the live 3D twin" width="900"></p>
 
-```bash
-npm install
-npm run dev
-```
+---
 
-Every route requires signing in first (see **Auth** below) — you'll land on `/login`.
+## The problem
 
-- `/command` — the command center (3D twin + panels + recommendation queue + concierge)
-- `/revenue` `/guests` `/operations` `/maintenance` `/inventory` `/sentiment` `/concierge` `/energy` `/assistant` `/surveillance` `/integrations` `/history` `/summary` — analytics deep dives
-- `npx tsx scripts/smoke.ts` — headless 3-day simulation run, prints KPIs
+A resort runs on five departments that each keep their own record of the truth — front office on a spreadsheet, maintenance on a logbook, housekeeping on a walkie-talkie, revenue on a static rate card, guest requests on a phone call. None talk to each other in real time and none explain *why* a decision was made. The result is a property that is permanently **reacting**: to a complaint after checkout, to a failure after it happens, to a rate that should have moved three days ago, to a storm everyone read about but nobody planned for.
 
-### Auth
+## The idea
 
-A real login gate, not just a client-side role dropdown: `/login` has a typed username/password
-form plus one-click "continue as \<role\>" demo cards, backed by a fixed 4-account roster (one
-per RBAC role, `lib/db/client.ts`) with genuinely salted-and-hashed passwords
-(`lib/auth/password.ts`, Node's built-in `scrypt` — no bcrypt dependency needed) and a signed,
-httpOnly session cookie (`lib/auth/session.ts`, HMAC-SHA256, 8h expiry). `middleware.ts` redirects
-any unauthenticated request for a page route to `/login`; `store/session.ts` hydrates the
-logged-in user's *server-verified* role from `/api/auth/session` on load — the free role-switcher
-dropdown this project used to have is gone, because a role is now something you log in as, not
-something you self-select from a menu.
+Give every department — and the guest — **one shared, spatial, explainable model of the property**, and make every decision module read from and write to that same model.
 
-**What this does and doesn't guarantee.** This is deliberately not a full auth framework
-(NextAuth/Auth.js etc.) — the app's pages are almost entirely client components reading a
-browser-only live simulation, so there's no per-request server render to hang a session provider
-off, and the actual demo need is narrower: real hashed passwords, a real signed session, and a
-real redirect gate, which is what's built. It gates *which pages a browser can load* and *which
-role you're assigned*, enforced server-side in `middleware.ts`. It does not, and structurally
-cannot, make the live simulation's own data confidential from the browser holding it — the
-entire sim state already lives in that browser's own JavaScript memory by design (see "What is
-real and what is simulated" below), so a curious user with devtools open could always read their
-own client's state regardless of role. RBAC's masking (`lib/rbac.ts`) was never a data-secrecy
-boundary and still isn't; it's a "would a real distribution of duties show this to this role"
-guardrail, same as before, just now behind a real login instead of a self-selectable label.
+<p align="center"><img src="docs/assets/one-model.png" alt="Five disconnected systems of record versus one shared model" width="760"></p>
 
-### Optional: local AI concierge + ops assistant (Ollama)
+Every recommendation carries the *measured inputs* that produced it (a Weibull hazard, an elasticity delta, a warm-pixel ratio) — never a bare confidence score. Accepting one **dispatches a real consequence** you can watch on the twin.
 
-Two opt-in Ollama-backed layers, both additive on top of deterministic systems that keep working with Ollama off:
+## What it does
 
-- **Guest concierge** (`/concierge`) — RAG-grounded conversational replies layered on the deterministic keyword classifier (`lib/intelligence/concierge.ts`), which still owns every task dispatch.
-- **Ops assistant** (`/assistant`) — a staff-facing, tool-calling assistant that answers live operational questions, direct or indirect ("who's in room 204", "what needs attention", "what have we planned for our VIPs", "what are we doing about the AC in 312") by calling real functions against the current simulation (`lib/ai/tools.ts`, 5 tools including `list_planned_actions` for indirect "what's planned/queued" questions), never a fixed script. Answers are masked per your selected role exactly like the Guests page (`lib/rbac.ts`). Every number a tool returns is rounded to something a chat table should actually show (a whole-number percentage, 2 decimal places) at the tool boundary itself, not left to the model to clean up. Supports English, Hindi and Marathi with an explicit per-language instruction on every request (a plain English question after an earlier Hindi exchange was verified live to otherwise drift into replying in Hindi, mid-conversation, following the earlier turn's language) and browser-native voice input/output that picks the closest actually-installed voice for the selected language (Web Speech API — no extra model, works in Chrome; falls back to text-only or a mismatched-accent default voice elsewhere).
-  - A separate, deterministic "show me" layer (`lib/twin/queries.ts`, shared with the Ctrl+K palette) moves the camera for genuine camera commands like "show me the rooms at risk" — gated on an explicit listing verb (which/list/show/highlight/...) and English only, after a real, shipped bug where a bare topic-word pattern (`vip` alone) hijacked ordinary questions in any language, including two Hindi ones, into the same wrong English camera caption instead of ever reaching the LLM.
-
-```bash
-ollama serve
-ollama pull llama3.1:8b       # chat model, also does the ops assistant's tool calling
-ollama pull nomic-embed-text  # embedding model, for RAG retrieval over the resort's own knowledge base
-```
-
-No API key, no outbound network call beyond `localhost:11434`. Override the models via `OLLAMA_CHAT_MODEL` / `OLLAMA_EMBED_MODEL` env vars — `phi3:mini` is a much faster (if less capable) alternative chat model if `llama3.1:8b` is too slow on CPU-only hardware, though it does not support tool calling, so the ops assistant needs `llama3.1:8b` or another tools-capable model specifically. First reply after a cold start can take 30-90s while Ollama loads the model into memory (measured live on modest hardware); both routes pre-warm the chat/embed models at server startup so this cost is paid once per process, not once per question — a warm exchange typically returns in 10-15s, including a tool call.
-
-### Optional: Telegram frontline bot
-
-A standalone process for housekeeping/engineering/front-desk staff to receive tasks and report issues from their own phone, without opening the dashboard. Built on Telegram rather than WhatsApp: a Telegram bot needs only a token from [@BotFather](https://t.me/BotFather) (free, instant, no verification), where the WhatsApp Business Cloud API requires a real Meta Business verification and a registered phone number — a real-world approval process, not something this session could set up or test end-to-end. The blueprint itself lists Telegram as the free, instant-setup option, so that's what's built.
-
-```bash
-# 1. Message @BotFather on Telegram, send /newbot, follow the prompts, copy the token it gives you
-# 2. Put it in a .env file in the project root (.env is gitignored, never commit it):
-echo "TELEGRAM_BOT_TOKEN=your-token-here" > .env
-
-# 3. Run the bot alongside (not instead of) the dev server:
-npm run dev    # terminal 1
-npm run bot    # terminal 2
-```
-
-**How it works:** the bot long-polls Telegram directly (no webhook, no public URL needed). Because the simulation only ever lives inside a browser tab, the bot can't reach it directly — instead it reads the same SQLite snapshot the app already persists every ~20s (`lib/db/client.ts`, originally built for demo continuity/audit trail) to know current staff and open tasks, and writes to a small `telegram_inbox` queue table. A hook in the running browser tab (`hooks/useTelegramInbox.ts`) polls that queue every 6s and applies each action through the same `lib/sim/actions.ts` functions any dashboard accept/dismiss button uses — so the dashboard must be open in a browser somewhere for actions to take effect, same as every other part of this sim.
-
-**Staff usage:**
-- `/start <your name>` — link this Telegram chat to a staff member on the current shift roster (exact or unambiguous partial match, e.g. `/start Priya`)
-- `/mytasks` — list currently assigned tasks with a "✅ Done" button per task (SLA-breached tasks are flagged)
-- Any other free text — reported as a new issue if it contains a valid room number (e.g. `"305 tap is leaking"`), routed through the same keyword classifier (`lib/intelligence/concierge.ts`) a guest concierge message goes through
-
-### Room dive & "show me" queries
-
-Two ways to explore the twin beyond point-and-read:
-
-- **Double-click any room** on `/command` to dive the camera inside it (single-click still just selects, for fast browsing across many rooms without diving into each one) and open a compact floating HUD (`components/command/DollhouseHud.tsx`) — the room's own highest-risk asset with a live sensor sparkline, a one-line guest note that's genuinely masked (not just visually smaller) when the guest hasn't consented to personalization, the room's own recent history, and the same accept-style action buttons as the sidebar. `Esc` or "Step back" returns to the floor view.
-- **"Show me" queries** — `Ctrl/⌘K` or the Ops Assistant (`/assistant`) both accept questions like *"which rooms are at risk tonight"*, *"which guests seem unhappy"*, or *"any SLA breaches open"*. Both call the same deterministic matcher (`lib/twin/queries.ts`) — not the LLM — so the camera frames and pulse-highlights the matched rooms and the answer appears as a caption, with zero hallucination risk in what actually moves the camera (the same reasoning behind keeping task dispatch deterministic elsewhere in this project). Asking from `/assistant` updates the same shared twin state and links to "View framed on the twin" since the 3D view isn't on that page; asking from `/command` itself shows the result immediately, in place.
-
-**Known limitations:** text and button interactions only — voice-note transcription (the blueprint's Marathi voice-note example) isn't implemented, since this session's own measured Ollama latency (30-90s per call on modest hardware) made adding a third heavy model for STT impractical for a demo. WhatsApp is scoped out entirely for the verification reason above.
-
-### CCTV Surveillance Intelligence — "the eyes of the resort"
-
-`/surveillance` — real, in-browser computer vision over real user-supplied test footage (fire/smoke, altercation/distress, parking occupancy), not staged screenshots. Full detail, math and calibration methodology in [`docs/SURVEILLANCE.md`](docs/SURVEILLANCE.md); short version:
-
-- **Parking** uses a real pretrained object detector (COCO-SSD via TensorFlow.js), binned into a zone-occupancy grid with a proper dashboard (stat cards, utilization bar, lettered zones, car icons) — not a bare number table.
-- **Fire and altercation** have no off-the-shelf pretrained classifier, so they read real, documented visual/motion signatures directly off the pixels — warm-hue + white-hot-core coverage and frame-to-frame flicker for fire; person-detection box overlap + motion + bounding-box aspect ratio for altercation/distress — with every threshold calibrated by extracting real frames via `ffmpeg` and measuring actual pixel values, not guessed.
-- Every detector runs through the same **persistence gate** (a signal must sustain across 4 of the last 6 samples) that this project's other anomaly-driven modules already use — the standard defense against a single noisy frame becoming a false alarm.
-- A confirmed event posts a **real alert** through the same `addAlert()`/`state.alerts` every other module uses — it shows up in the same BottomDock feed as a maintenance or sentiment alert, not a separate silo.
-- Video loops continuously with a Stop button and a 1×/2×/3× playback-speed control (`HTMLVideoElement.playbackRate`) for reviewing longer clips quickly.
-
-### Automation Scenarios — a curated, narrated "watch it decide" demo
-
-Distinct from the blanket Autopilot toggle below: `Automation scenarios` in the left rail opens a catalog of 15 real scenarios, one per intelligence module (plus live concierge chat and the guest-app bridge). Pick one, read a brief (situation/detection/reasoning), and watch it run — narrated step by step (detect → decide → dispatch → real staff walk with a live progress bar → resolved), not jump-cut from start to done. See [`docs/AUTOMATION_AND_INTEGRATIONS.md`](docs/AUTOMATION_AND_INTEGRATIONS.md).
-
-### Guest-app bridge + registration QR
-
-The guest-facing companion app (a separate deployment, [`SDP42/guestexperience`](https://github.com/SDP42/guestexperience)) has no shared database with this one. `app/api/guest-app/inbox` is a real HTTP bridge (same architecture as the Telegram bot: queue table + polling hook + real action functions) that receives and dispatches guest-originated orders — verified live end-to-end. The Guests page can generate a real, scannable registration QR using an actual `(room, stay_id, guest)` triple pulled from guestexperience's own public seed data, so a demo scan resolves to genuine data. Full detail, including the honest limits of what's connected today, in [`docs/AUTOMATION_AND_INTEGRATIONS.md`](docs/AUTOMATION_AND_INTEGRATIONS.md).
-
-## What is real and what is simulated
-
-**Everything numeric is synthetic** — except one signal, deliberately. A seeded engine (`lib/sim`) generates the property, guests, staff, telemetry, requests, reviews and revenue. Same seed, same run. The UI tags values as `SIMULATED` (raw sim state), `MODELED` (output of an intelligence module) or `DERIVED` (aggregation). No real property or guest data is used or implied.
-
-**The one real external integration: weather.** Every other module's own methodology entry names its real-world swap-in as future work (real PMS, real IoT, real POS). Weather was built as that swap for real, not just described — `app/api/weather` calls Open-Meteo (no API key, CORS-open) for Goa, India (a stand-in coordinate for "Azure Bay Resort"), cached 20 minutes server-side; `hooks/useLiveWeather.ts` polls it automatically on the same cadence, no manual refresh; `lib/intelligence/weather.ts` prefers the real forecast once it arrives and falls back to the deterministic seeded one otherwise — the *rain/heatwave playbook logic* consuming it never changes either way. The Operations page's weather card labels which one is currently live (`live · open-meteo` vs `simulated`), honestly, rather than presenting both the same way.
-
-The *models* are real implementations, not stubs:
-
-| Module | Method | File |
+| | Capability | Where it lives |
 |---|---|---|
-| Predictive maintenance | Weibull hazard on health-adjusted runtime × telemetry anomaly z-scores → P(fail ≤ 7d), RUL | `lib/intelligence/maintenance.ts` |
-| Dynamic pricing | Constant-elasticity demand curve with seasonality, pacing, competitor index; RevPAR grid search | `lib/intelligence/pricing.ts` |
-| Staffing | Hourly demand profiles × occupancy → greedy shift allocation + swap improvement | `lib/intelligence/staffing.ts` |
-| Inventory | Holt linear-trend forecast, 1.65σ safety stock over lead time, EOQ | `lib/intelligence/inventory.ts` |
-| Sentiment | Aspect lexicon with clause-level negation; department routing with floor hotspot | `lib/intelligence/sentiment.ts` |
-| Segmentation | k-means (k=5, k-means++ init) on 6 normalised behavioural features | `lib/intelligence/segmentation.ts` |
-| Personalization | Rule-scored next-best-action ranking by preference, loyalty and stay stage | `lib/intelligence/personalization.ts` |
-| AI concierge (task dispatch) | Weighted keyword intent classifier with urgency detection → task dispatch | `lib/intelligence/concierge.ts` |
-| AI concierge (conversational layer, opt-in) | Retrieval-augmented generation over a real knowledge base (cosine similarity, `nomic-embed-text` embeddings) grounds a local Ollama model (`llama3.1:8b`); a deterministic guardrail filter blocks refund/discount/compensation language after generation, before it reaches the guest | `lib/ai/*`, `app/api/concierge/route.ts` |
-| Ops assistant (opt-in) | Function-calling loop against a local Ollama model — 4 tools (`find_room`, `list_open_issues`, `list_guests`, `get_resort_summary`) query a fresh per-request snapshot of the live sim, role- and consent-masked identically to the Guests page; replies are Markdown, rendered by a small dependency-free renderer scoped to what the system prompt actually asks the model to produce | `lib/ai/tools.ts`, `lib/ai/opsSnapshot.ts`, `app/api/ops-assistant/route.ts`, `components/ui/Markdown.tsx` |
-| Telegram frontline bot (opt-in) | Standalone long-polling process bridged to the browser-only sim via a SQLite read model + write queue; free-text issue reports route through the same keyword classifier as the guest concierge | `scripts/telegramBot.ts`, `lib/telegram/*`, `hooks/useTelegramInbox.ts`, `app/api/telegram/inbox/route.ts` |
-| Guest-app bridge | Real HTTP inbox + adapter translating a separate guest-facing app's own request schema onto this project's `RequestType`, drained by a browser hook into the same dispatch functions | `app/api/guest-app/inbox`, `lib/integration/guestAppAdapter.ts`, `hooks/useGuestAppInbox.ts` |
-| CCTV surveillance (fire/altercation) | Calibrated pixel-color + frame-flicker heuristic (fire) and person-detection box-overlap/motion/aspect-ratio heuristic (altercation) — no off-the-shelf classifier exists for either, so both read real, documented signatures directly off the pixels, persistence-gated | `lib/vision/fireHeuristic.ts`, `lib/vision/altercationHeuristic.ts`, `lib/vision/persistence.ts` |
-| CCTV surveillance (parking) | Real pretrained object detection (COCO-SSD/TensorFlow.js), confidence floor corrected for overhead camera angle, binned into a zone-occupancy grid | `lib/vision/coco.ts`, `lib/vision/parkingGrid.ts` |
-| Causal chain (composite view) | Reconstructs complaint → diagnosis → work order → relocation → recovery as one timeline, purely by reading four already-running modules — no new mutable state | `lib/intelligence/causalChain.ts` |
-| Demand spine (composite view) | Seasonal-naive 14-day occupancy/ADR forecast blending real observed history toward a scenario baseline while history is thin | `lib/intelligence/demandSpine.ts` |
-| Guest Experience Index (composite view) | One composite 0-1 score per guest — 40% sentiment / 25% SLA hit-rate / 20% segment-relative engagement / 15% loyalty | `lib/intelligence/guestExperience.ts` |
+| **12 decision modules** | Predictive maintenance (Weibull), dynamic pricing (elasticity), staffing (greedy + swap), inventory (Holt/EOQ), sentiment, segmentation (k-means), personalization, concierge, guest relocation, energy, group blocks, in-stay recovery | [`lib/intelligence`](lib/intelligence) · [math](docs/INTELLIGENCE_MODELS.md) |
+| **3 composite views** | Causal chain, 14-day demand spine, Guest Experience Index | `lib/intelligence` |
+| **Weather-aware digital twin** | Live forecast drives the simulation; paired Monte Carlo what-if on the *real* tick engine; regional map with radar and hazard events | [`/weather-twin`](app/weather-twin) · [docs](docs/WEATHER_AND_SIGNALS.md) |
+| **Public-signal intelligence** | 7 live sources (NewsAPI, GNews, Reddit, Bluesky, Mastodon, GDACS, Google Trends) → 0–1 public-concern score | [`app/api/social-weather-signals`](app/api/social-weather-signals) |
+| **CCTV vision layer** | Fire, altercation/distress, parking occupancy — real in-browser detection over bundled test clips, persistence-gated | [`lib/vision`](lib/vision) · [docs](docs/SURVEILLANCE.md) |
+| **AI assistants** | Ops Assistant + guest Concierge on a **Nugen-aligned model with automatic Ollama fallback**; exact-maths composers; grounding gate | [`lib/ai`](lib/ai) · [docs](docs/AI_ASSISTANTS.md) |
+| **Automation** | Autopilot (same `accept()` as a manual click), 15 narrated scenarios, emergency response, Telegram staff bot | [docs](docs/AUTOMATION_AND_INTEGRATIONS.md) |
+| **Guest side** | Two-way bridge to the separate guest companion app, registration QR, live Guest Requests view | [`app/api/guest-app`](app/api/guest-app) |
+| **Governance** | Role-based login (4 roles), salted scrypt hashes, signed sessions, SQLite audit log, guest-consent masking | [`lib/auth`](lib/auth) · [`lib/db`](lib/db) |
 
-Full derivations and formulas for every module above: [`docs/INTELLIGENCE_MODELS.md`](docs/INTELLIGENCE_MODELS.md). System diagrams and data flow: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+<p align="center"><img src="docs/assets/modules.png" alt="The twelve core decision modules" width="760"></p>
+
+## See it
+
+<table>
+<tr>
+<td width="50%"><img src="docs/assets/command-center.jpg" alt="Command center: 3D twin, KPIs, asset risk and recommendation queue"><br><sub><b>Command center</b> — live 3D twin, asset-risk pins, KPIs, and a recommendation queue where every card shows its basis.</sub></td>
+<td width="50%"><img src="docs/assets/weather-twin.jpg" alt="Weather digital twin with live radar map"><br><sub><b>Weather digital twin</b> — live 7-day forecast, regional map with radar, and the paired Monte Carlo what-if.</sub></td>
+</tr>
+<tr>
+<td width="50%"><img src="docs/assets/surveillance.jpg" alt="CCTV parking detection with zone grid"><br><sub><b>CCTV vision</b> — COCO-SSD vehicle detection binned into a 12-zone grid, running in the browser on bundled footage.</sub></td>
+<td width="50%"><img src="docs/assets/ops-assistant-weather.png" alt="Ops assistant weather briefing with Monte Carlo table"><br><sub><b>Ops Assistant</b> — a templated storm briefing: forecast, modeled bands, actions, and the tools used.</sub></td>
+</tr>
+<tr>
+<td width="50%"><img src="docs/assets/maintenance.png" alt="Predictive maintenance dashboard"><br><sub><b>Predictive maintenance</b> — Weibull hazard × telemetry anomaly, with the measured basis on every card.</sub></td>
+<td width="50%"><img src="docs/assets/guest-requests.png" alt="Live guest requests arriving from the guest app"><br><sub><b>Guest bridge</b> — orders placed in the companion app land here live and dispatch real staff.</sub></td>
+</tr>
+</table>
+
+## Design principles
+
+1. **Explainable by construction** — every recommendation shows its measured basis.
+2. **Persistence-gated everywhere a signal is noisy** — one spike never becomes an alert (maintenance, sentiment, CCTV alike).
+3. **Numbers come from code, not from a language model** — AI answers are handed facts; arithmetic is computed; unverified figures are flagged.
+4. **Honest about what is real** — every value is tagged `SIMULATED`, `MODELED` or `DERIVED`; every external feed shows live / unreachable individually.
+5. **A visible off-ramp for automation** — Autopilot and scenarios execute the same functions a human click does, and can be stopped any time.
+6. **Graceful degradation** — a blocked API, a missing key or an offline network degrades one feature, never the app.
 
 ## Architecture
 
+<p align="center"><img src="docs/assets/architecture.png" alt="Ingestion, core simulation, intelligence, action layer and presentation" width="900"></p>
+
+```mermaid
+flowchart LR
+    subgraph IN["Ingestion"]
+        SEED["Seeded engine"]
+        PUB["Public feeds\nOpen-Meteo · GDACS · news · social"]
+        GUEST["Guest app\n(HTTP bridge)"]
+        CCTV["CCTV clips\n(in-browser CV)"]
+    end
+    STATE[("SimState\none shared state")]
+    subgraph IQ["Intelligence"]
+        MOD["12 modules + 3 views"]
+        WX["Weather twin\nMonte Carlo what-if"]
+        AI["AI assistants\nNugen-aligned → Ollama"]
+    end
+    ACT["Action layer\naccept · dispatch · relocate · audit"]
+    UI["3D twin · dashboards\nOps Assistant · Concierge"]
+    SEED & PUB & GUEST & CCTV --> STATE
+    STATE --> MOD & WX & AI
+    MOD & WX & AI --> ACT --> STATE
+    STATE --> UI
 ```
-lib/architecture   parametric resort generator (config → rooms, zones, assets, nav graph)
-lib/sim            entity types, seeded population, tick engine, A* pathfinding, actions,
-                    scenarioCatalog.ts (Automation Scenarios)
-lib/intelligence   the twelve modules + registry + 3 composite views (causal chain,
-                    demand spine, guest experience index)
-lib/vision         CCTV surveillance layer: real object detection + calibrated
-                    fire/altercation heuristics + the shared persistence gate
-lib/integration    the guest-app bridge adapter + real seed-data mapping for the QR feature
-lib/adapters       PMS/BMS/camera-analytics payload contracts (Integrations page)
-lib/twin           layer colour maps, merged geometry builders, materials
-store              zustand: sim (transient), twin view state, quality tier, ui, director
-components/twin    R3F scene: floors, facade, room plates, furniture, site, staff agents, markers
-components/command command center shell, BottomDock, AutomationScenariosPanel, context panels
-components/analytics  deep-dive routes, including Surveillance, Integrations, GuestPhoneMock
+
+The simulation mutates one state object at 10 Hz; the 3D layer reads it inside `useFrame`, so React never re-renders per tick. Geometry is procedural (no model files), merged and instanced to roughly 90 draw calls. Full detail: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+
+## AI layer: Nugen Intelligence + Ollama fallback
+
+The requirement is a chain, not an API call — **base model → Nugen alignment → domain model → integrated inference** — and that is exactly what is built and scripted.
+
+<p align="center"><img src="docs/assets/nugen-flow.png" alt="Nugen alignment and inference flow" width="900"></p>
+
+```bash
+npm run nugen:corpus      # build the 19-file domain corpus (docs, knowledge bases, engine-generated exemplars, style guides)
+npm run nugen:align       # upload → benchmark → align base model → deploy → writes NUGEN_MODEL_ID to .env.local
+npm run nugen:status      # progress + account models
+npm run nugen:chat        # base vs aligned answers, side by side
 ```
 
-See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the full system diagram and data-flow model.
+At runtime **both assistants** (staff Ops Assistant and the guest Concierge) share one provider chain — Nugen-aligned model first, local Ollama automatically on any error, and the guest Concierge has a final offline answer — and every reply shows which provider produced it.
 
-**Geometry is procedural.** No model files. `defaultConfig` in `lib/architecture/config.ts` sets floors, rooms per side, room dimensions, roof and site — change it and the twin regenerates. Walls are merged per floor, furniture and room plates are instanced, so the whole resort renders in roughly 90 draw calls.
+What makes the answers trustworthy rather than merely fluent:
 
-**The sim never re-renders React.** It mutates a single state object at 10 Hz; the 3D layer reads it in `useFrame`, panels subscribe to a throttled version counter.
+- **Exact-maths composers** answer savings, commission, zone-shock, weather-briefing and equipment questions from measured numbers with *no model at all*.
+- **Deterministic routing** pre-fetches the live data a question needs and injects it into the prompt.
+- **Grounding gate** — any figure ≥ 1,000 in a reply must appear in the data the model was given (±0.6 %); otherwise one rewrite, then a visible caveat.
+- **Guardrails** block promises of refunds, discounts or compensation.
 
-**Quality tiers** (`store/quality.ts`) auto-degrade on low FPS: DPR, shadows, post-processing, glass transmission and palm density.
+Details: [`docs/AI_ASSISTANTS.md`](docs/AI_ASSISTANTS.md) · [`docs/NUGEN_INTEGRATION.md`](docs/NUGEN_INTEGRATION.md) (includes current alignment status).
 
-### Autopilot — a glimpse of full automation
+## Quick start
 
-`Operating mode` at the top of the left rail switches between **Manual** (the default — every
-recommendation waits for a human to click Accept, exactly as everywhere else in this project) and
-**Autopilot** (a demo mode: every pending recommendation counts down for 6 seconds, visibly, then
-calls the exact same `acceptRecommendation()` a manual click would — real execution, not a scripted
-fake sequence). This exists because the single biggest gap between "recommendation system" and
-"autonomous operating system" is the human-approval step — Autopilot removes it live, in front of
-a judge, using 100% of the existing dispatch logic, with a clean way back: switching to Manual
-mid-countdown cancels every pending timer immediately (`components/command/BottomDock.tsx`).
+Requires **Node ≥ 22.5** (built-in `node:sqlite`).
 
-Each auto-execution also frames the affected room on the twin and captions it ("AUTOPILOT" label,
-`store/twin.ts`'s `ask()` — the same mechanism the Ctrl+K "show me" feature uses), so watching
-Autopilot run feels like watching the resort make its own decisions, not just numbers flipping in
-a list. Deliberately scoped to the one aggregated recommendation queue (`BottomDock`) rather than
-retrofitted across every analytics page's own inline recommendation cards — one well-tested surface
-covering every module's recommendations beats several partially-consistent ones.
+```bash
+npm install
+npm run dev            # http://localhost:3000  (landing page)  →  Open Admin Dashboard
+```
 
-### What-if simulator
+Sign in with a one-click demo role (General Manager, Revenue Manager, Front Office Manager, Executive Housekeeper). Then:
 
-`Planning → What if…` in the left rail opens a projection panel: drag a hypothetical occupancy and watch recommended RevPAR/ADR, unmet staffing shifts, and inventory reorder counts move — computed by re-running the exact same production functions the Revenue/Operations/Inventory pages use (`computePricing`, `solveRoster`, `assessInventory`) against a cloned state with only `kpis.occupancy` overridden, never the real one (`lib/intelligence/whatIf.ts`). Not a separate toy model and not applied to the live sim — a GM's forecast before a decision, not the decision itself.
+| Try this | Route |
+|---|---|
+| The 3D twin, recommendation queue, Autopilot, "What if…", "Weather what if…" | `/command` |
+| Run CCTV detection on fire / parking / behaviour clips | `/surveillance` |
+| Weather twin, regional map, public signals | `/weather-twin` |
+| Ask the Ops Assistant (try the prompts below) | `/assistant` |
+| Live guest requests arriving from the guest app | `/integrations` |
 
-## Keyboard
+Optional services (everything works without them): `ollama pull llama3.1:8b` and `ollama pull nomic-embed-text` for the local fallback; `NUGEN_API_KEY` / `NUGEN_MODEL_ID` in `.env.local` for the aligned model (copy `.env.example`); `NEWS_API_KEY` / `GNEWS_API_KEY` for two of the seven signal sources; a Telegram bot token for the staff bot. See the [feature guide](docs/FEATURE_GUIDE.md).
 
-`1–7` view modes · `U Q W E R Y` layers (risk · occupancy · maintenance · sentiment · revenue · energy) · `Shift+T` housekeeping layer · `[ ]` floors · `Space` pause · `⌘K` search · `T` tour · `?` help
+### Prompts that show the assistant off
+
+> *We spend about ₹8 lakh a month on chiller repairs. If predictive maintenance cuts unplanned-failure cost by 20 to 40%, what do we save a year?* — exact working table
+
+> *A cyclone hits Goa this weekend. How should we prepare and what does the model say happens?* — forecast table, Monte Carlo bands, actions
+
+> *Suppose heavy rain cuts pool-deck demand by 55%. How much daily revenue is at risk?* — outlet-scoped answer, honest about untracked revenue
+
+> *Which equipment should engineering service first, and why is waiting expensive?* — ranked risk, 3–5× reactive-cost benchmark
+
+> *Which APIs does this system integrate and what is each used for?* · *How does the CCTV fire detection avoid false alarms?*
+
+## Quality
+
+```bash
+npm run lint && npx tsc --noEmit && npm test && npm run build     # what CI runs
+npx tsx scripts/smoke.ts                                          # headless multi-day simulation, prints KPIs
+```
+
+270+ tests cover every intelligence module, the simulation engine, auth and RBAC, the AI tool layer, the exact-maths composers, the Nugen provider chain (mocked transport) and the numeric grounding gate.
+
+## What is real, modeled and simulated
+
+| Status | Meaning |
+|---|---|
+| **Real** | Running, verified code: the twin, all module maths, CCTV detection on bundled clips, live weather, the what-if engine, the regional map, each public feed individually, the Telegram bot, the two-way guest bridge, RBAC, the assistant provider chain. |
+| **Modeled** | A real formula applied to simulated state — a hazard %, a next-best-action score, a what-if percentile band. |
+| **Simulated** | The property, guests, staff and telemetry come from a seeded deterministic engine. No real guest data exists or is implied. |
+
+PMS / BMS / camera-analytics are proven as payload contracts only. Nugen alignment is scripted and verified against the live API; at the time of writing Nugen's training service was returning HTTP 502, so the assistants run on the Ollama fallback until an aligned model deploys ([status](docs/NUGEN_INTEGRATION.md#status)). Business-impact figures are modeled projections, never measurements.
+
+## Project layout
+
+```
+app/                Next.js routes: /command, analytics pages, /surveillance, /weather-twin, /assistant, API routes
+components/         twin (R3F scene), command center, analytics, UI primitives
+lib/sim/            seeded population, 10 Hz tick engine, A* staff pathing, actions, scenario catalogue
+lib/intelligence/   12 decision modules, 3 composite views, weather twin, social signals, what-if
+lib/vision/         CCTV: COCO-SSD parking, calibrated fire/altercation heuristics, persistence gate
+lib/ai/             provider chain (Nugen → Ollama), tools, composers, grounding gate, knowledge base
+lib/auth · lib/db   scrypt hashes, signed sessions, RBAC · SQLite audit log and snapshots
+scripts/nugen/      corpus builder + alignment pipeline (upload → benchmark → align → deploy → chat)
+scripts/            smoke test, Telegram bot
+public/surveillance bundled demo footage (10 clips) so detection runs on any deployment
+docs/               architecture, models, surveillance, automation, AI, Nugen, API catalogue, problems solved
+tests/              270+ vitest tests
+```
+
+## Documentation
+
+| Doc | Covers |
+|---|---|
+| [ARCHITECTURE](docs/ARCHITECTURE.md) | System diagrams, data flow, state and rendering model |
+| [INTELLIGENCE_MODELS](docs/INTELLIGENCE_MODELS.md) | The maths behind every module |
+| [AI_ASSISTANTS](docs/AI_ASSISTANTS.md) | Provider chain, tools, composers, routing, grounding gate |
+| [NUGEN_INTEGRATION](docs/NUGEN_INTEGRATION.md) | Alignment pipeline, corpus, runtime flow, env vars, status |
+| [WEATHER_AND_SIGNALS](docs/WEATHER_AND_SIGNALS.md) | Weather twin, Monte Carlo what-if, public-signal score, regional map |
+| [API_CATALOG](docs/API_CATALOG.md) | Every external API and internal route, with use case and failure behaviour |
+| [SURVEILLANCE](docs/SURVEILLANCE.md) | CCTV layer and how thresholds were calibrated |
+| [AUTOMATION_AND_INTEGRATIONS](docs/AUTOMATION_AND_INTEGRATIONS.md) | Autopilot, scenarios, Telegram, guest bridge |
+| [FEATURE_GUIDE](docs/FEATURE_GUIDE.md) | Detailed setup, per-feature behaviour, keyboard shortcuts, known limitations |
+| [PROBLEMS_AND_SOLUTIONS](docs/PROBLEMS_AND_SOLUTIONS.md) | Real bugs, root causes, fixes |
+| [DIFFERENTIATORS](docs/DIFFERENTIATORS.md) | What to check as a reviewer, and where it is demonstrated |
 
 ## Limitations
 
-- Sentiment is lexicon-based; it will miss sarcasm and novel phrasing.
-- Pricing assumes a single elasticity across segments; a production model would estimate elasticity per segment and channel.
-- Staff pathfinding uses a coarse corridor graph; agents walk through room interiors once inside a room.
-- The task-dispatching concierge classifier is keyword-weighted, not a language model; it is deliberately transparent rather than fluent — this is why task creation never runs through the LLM.
-- The opt-in Ollama conversational layer can still state something not actually in the retrieved knowledge (observed live: a Silver-tier guest was told they get a Gold/Platinum-only benefit) — RAG grounds the model, it doesn't guarantee it. The guardrail filter catches promise-of-compensation language specifically; it is not a general factuality check. Treat the LLM's replies as a fluency layer to verify, not an authority to trust blindly, same as the blueprint's own "escalate to a human when unsure" principle.
-- The ops assistant's Markdown renderer is intentionally not a general Markdown parser — it covers headers, bold, bullet/numbered lists and pipe tables, the exact subset the system prompt instructs the model to use, nothing more.
-- Voice input/output uses the browser's own Web Speech API, not a local speech model — real STT/TTS quality and language coverage (English/Hindi/Marathi) depend entirely on the browser and OS, and it is unavailable outside Chromium-based browsers.
-- Failure probabilities are calibrated to look plausible, not to any real asset population.
-- The Telegram bot is text/button-only (no voice-note transcription) and requires the dashboard open in a browser tab somewhere to actually apply its queued actions — it's a remote control for the live sim, not an independent backend. WhatsApp support was scoped out; see the setup section above for why.
-- The CCTV surveillance layer's fire/altercation detectors are calibrated heuristics (real pixel color/flicker and person-detection motion/geometry signals), not trained classifiers — there is no labeled dataset or training pipeline in this project to build one. They were calibrated against the specific test footage supplied; genuinely different lighting or camera conditions would likely need the same measure-then-calibrate process repeated, not a guaranteed generalization. See [`docs/SURVEILLANCE.md`](docs/SURVEILLANCE.md).
-- The guestexperience guest-app bridge is real and verified end-to-end from this app's side, but the guest app itself does not call it yet — this is stated future work, not an implied existing connection.
-- Parking occupancy uses a coarse zone grid, not per-slot calibrated polygons — a legitimate next step for a specific camera, not done here for the provided test clips.
+Sentiment is lexicon-based; pricing blends elasticity by guest mix rather than estimating per channel; CCTV fire and altercation detectors are calibrated heuristics, not trained classifiers; public-signal scoring is a coarse keyword-and-hazard blend and some sources may be unreachable from a given network; the what-if band uses six paired runs; weather and map coordinates are fixed to Goa as a stand-in property. The full list is in the [feature guide](docs/FEATURE_GUIDE.md#limitations).
 
-## Further reading
+---
 
-- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — system diagrams, data flow, folder map
-- [`docs/INTELLIGENCE_MODELS.md`](docs/INTELLIGENCE_MODELS.md) — the math behind every module
-- [`docs/SURVEILLANCE.md`](docs/SURVEILLANCE.md) — the CCTV vision layer in depth
-- [`docs/AUTOMATION_AND_INTEGRATIONS.md`](docs/AUTOMATION_AND_INTEGRATIONS.md) — Autopilot, Scenarios, bridges, weather, adapters
-- [`docs/PROBLEMS_AND_SOLUTIONS.md`](docs/PROBLEMS_AND_SOLUTIONS.md) — real bugs, root causes, fixes
-- [`docs/DIFFERENTIATORS.md`](docs/DIFFERENTIATORS.md) — what to check for as a judge
+<div align="center"><sub>Built for HackCelestial 3.0 at Pillai University. Companion guest app: <a href="https://github.com/SDP42/guestexperience">SDP42/guestexperience</a>.</sub></div>

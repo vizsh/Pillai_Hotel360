@@ -1,6 +1,31 @@
 {
   "name": "smart-resort-360",
   "version": "0.1.0",
+  "description": "Live explainable 3D digital twin for resort operations: 12 decision-science modules, weather-aware Monte Carlo what-if, real in-browser CCTV vision, and Nugen-aligned AI assistants with Ollama fallback.",
+  "keywords": [
+    "digital-twin",
+    "hospitality",
+    "nextjs",
+    "react-three-fiber",
+    "predictive-maintenance",
+    "revenue-management",
+    "computer-vision",
+    "weather-simulation",
+    "monte-carlo",
+    "explainable-ai",
+    "nugen",
+    "ollama",
+    "rag",
+    "hackathon"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vizsh/Pillai_Hotel360.git"
+  },
+  "homepage": "https://github.com/vizsh/Pillai_Hotel360#readme",
+  "bugs": {
+    "url": "https://github.com/vizsh/Pillai_Hotel360/issues"
+  },
   "private": true,
   "engines": {
     "node": ">=22.5.0"

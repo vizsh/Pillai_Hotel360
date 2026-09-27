@@ -33,3 +33,19 @@ No face recognition anywhere, including the CCTV layer — every vision detectio
 ## 8. Every fix in this codebase is verified live, not just "should work now"
 
 `tsc --noEmit`, the full Vitest suite, `eslint`, and `npm run build` are run after every change — but more importantly, every user-facing feature in this project has been driven through an actual browser (screenshots, console inspection, live state reads) before being called done, including deliberately reproducing a bug first to confirm the *actual* root cause rather than the first plausible one. See [`PROBLEMS_AND_SOLUTIONS.md`](PROBLEMS_AND_SOLUTIONS.md) for the log of exactly that process.
+
+## 7. The AI never supplies the numbers
+
+Ask the Ops Assistant *"We spend ₹8 lakh a month on repairs; if predictive maintenance cuts it 20–40%, what do we save a year?"* — the answer is a working table computed in code, instantly, with no model involved. Open questions go to a Nugen-aligned model with a local Ollama fallback, but every figure in the reply must exist in the data it was given, or the reply is rewritten and flagged. See [AI_ASSISTANTS.md](AI_ASSISTANTS.md).
+
+## 8. A real alignment pipeline, not an API call
+
+`npm run nugen:align` performs upload → benchmark → align → deploy against Nugen's live API, resumable and scripted; both assistants share one provider chain and show which provider answered. See [NUGEN_INTEGRATION.md](NUGEN_INTEGRATION.md) (including the current, honestly reported alignment status).
+
+## 9. It rehearses the storm before it arrives
+
+The weather what-if fast-forwards the *real* simulation engine under a scenario versus an identical clear day across paired seeds and reports P10/P50/P90 bands — a causal estimate, not a guess — fed by live weather, official hazard alerts and public signals. See [WEATHER_AND_SIGNALS.md](WEATHER_AND_SIGNALS.md).
+
+## 10. Every external source is failure-isolated
+
+Seven public signal sources, radar, and maps each report live or unreachable individually; a blocked API degrades one badge, never the feature. Demo footage ships in the repo so the CCTV layer works on any deployment.
