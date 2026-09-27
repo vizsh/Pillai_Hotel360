@@ -6,9 +6,8 @@ export interface ClipMeta {
   src: string;
 }
 
-/** The user-supplied test clips under public/surveillance/ (gitignored — see .gitignore's
- * "surveillance demo video dataset" entry; not part of the committed repo). Filenames are
- * exactly as extracted from the provided dataset zip. */
+/** The demo clips committed under public/surveillance/ so the deployed site has footage to run detection on
+ * (the two longest fire and parking clips were re-encoded to 854x480 / 1280x720; detection samples a 96x54 canvas). */
 export const CLIPS: Record<DetectionCategory, ClipMeta[]> = {
   fire: [
     { id: "fire-1", label: "Dashcam / exterior clip", src: "/surveillance/fire_detection/00e18d86-3389d8dc.mp4" },

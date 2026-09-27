@@ -46,8 +46,6 @@ next-env.d.ts
 # sqlite persistence (runtime data, not source)
 /data/
 
-# surveillance demo video dataset (user-supplied test clips, ~280MB — not project source)
-/public/surveillance/
 
 # Nugen alignment: generated corpus is rebuilt by `npm run nugen:corpus`; state holds run ids only
 /nugen/corpus/
