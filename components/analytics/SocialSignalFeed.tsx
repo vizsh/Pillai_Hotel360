@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 import { Newspaper, Rss, MessageCircle, AtSign, ShieldAlert, TrendingUp } from "lucide-react";
 import { useSim } from "@/store/sim";
-import { getSocialSignals, getHazardEvents, getTrendScore, getSignalSources, socialSignalsSource, publicConcernScore } from "@/lib/intelligence/socialSignals";
+import { getSocialSignals, getHazardEvents, getTrendScore, getSignalSources, socialSignalsSource, publicConcernScore, getSignalAnalysis, disruptionScore } from "@/lib/intelligence/socialSignals";
 import type { SignalSource } from "@/app/api/social-weather-signals/route";
 import { cn } from "@/lib/utils";
 
@@ -20,6 +20,17 @@ const SOURCE_META: Record<SignalSource, { label: string; icon: typeof Rss; color
   mastodon: { label: "Mastodon", icon: MessageCircle, color: "#6364ff" },
   newsapi: { label: "NewsAPI", icon: Newspaper, color: "#2dd4bf" },
   gnews: { label: "GNews", icon: Newspaper, color: "#34d399" },
+};
+
+const INTENT_META: Record<string, { label: string; color: string }> = {
+  cancellation: { label: "cancellation", color: "#f4436c" },
+  "delay-disruption": { label: "delay / disruption", color: "#f5a524" },
+  flooding: { label: "flooding", color: "#38bdf8" },
+  "safety-warning": { label: "safety warning", color: "#f4436c" },
+  advisory: { label: "advisory", color: "#a78bfa" },
+  "demand-shift": { label: "demand shift", color: "#2dd4bf" },
+  positive: { label: "positive", color: "#34d399" },
+  irrelevant: { label: "not relevant", color: "#64748b" },
 };
 
 const ALERT_COLOR: Record<string, string> = { Red: "#f4436c", Orange: "#f5a524", Green: "#34d399" };
@@ -49,6 +60,8 @@ export function SocialSignalFeed() {
   const sources = getSignalSources();
   const live = socialSignalsSource() === "live";
   const concern = publicConcernScore();
+  const analysis = getSignalAnalysis();
+  const disruption = disruptionScore();
 
   const gaugeColor = concern > 0.6 ? "#f4436c" : concern > 0.3 ? "#f5a524" : "#34d399";
   const circumference = 2 * Math.PI * 26;
@@ -82,6 +95,18 @@ export function SocialSignalFeed() {
           )}
         </div>
       </div>
+
+      {analysis && (
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-stroke bg-white/[0.02] px-3 py-2">
+          <span className="mono text-[9.5px] uppercase tracking-wider text-low">Traveller-impact reading</span>
+          <span className={cn("mono rounded px-1.5 py-0.5 text-[9.5px]", analysis.provider === "rules" ? "bg-white/[0.06] text-mid" : "bg-accent/20 text-accent")}>
+            {analysis.provider === "nugen" ? "Nugen-aligned model" : analysis.provider === "ollama" ? "Ollama (fallback)" : analysis.provider === "hosted" ? "hosted model" : "rule-based classifier"}
+          </span>
+          <span className="mono ml-auto text-[10.5px] text-mid">
+            disruption <span className={cn("font-semibold", disruption > 0.5 ? "text-critical" : disruption > 0.25 ? "text-warm" : "text-positive")}>{(disruption * 100).toFixed(0)}%</span> → feeds the twin&rsquo;s complaint and front-desk load
+          </span>
+        </div>
+      )}
 
       <div className="flex flex-wrap gap-1.5">
         {(Object.keys(SOURCE_META) as SignalSource[]).map((s) => (
@@ -147,6 +172,14 @@ export function SocialSignalFeed() {
                     <Icon size={10} color={meta.color} />
                     {meta.label} · {timeAgo(it.publishedAt)}
                     {theme && <span className="rounded bg-white/[0.06] px-1 py-0.5 text-[8.5px] uppercase tracking-wider text-mid">{theme}</span>}
+                    {analysis?.byId[it.id] && (
+                      <>
+                        <span className="rounded px-1 py-0.5 text-[8.5px] uppercase tracking-wider" style={{ background: `${INTENT_META[analysis.byId[it.id].intent].color}22`, color: INTENT_META[analysis.byId[it.id].intent].color }}>
+                          {INTENT_META[analysis.byId[it.id].intent].label} · {(analysis.byId[it.id].urgency * 100).toFixed(0)}
+                        </span>
+                        {analysis.byId[it.id].location && <span className="text-mid">@ {analysis.byId[it.id].location}</span>}
+                      </>
+                    )}
                   </div>
                 </div>
               </a>

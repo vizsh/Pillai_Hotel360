@@ -5,6 +5,7 @@ import { TOOL_SCHEMAS, executeTool, routeTools, precomputeMoney, precomputeUserM
 import type { OpsSnapshot } from "@/lib/ai/opsSnapshot";
 import { buildOpsSystemPrompt, type AssistantLanguage } from "@/lib/ai/opsAssistantPrompt";
 import { composeAnswer } from "@/lib/ai/composers";
+import { offlineAnswer } from "@/lib/ai/offlineAnswer";
 import { violatesGuardrails, GUARDRAIL_FALLBACK_REPLY } from "@/lib/ai/conciergePrompt";
 
 const MAX_TOOL_CALLS = 5;
@@ -34,7 +35,13 @@ export async function POST(req: Request) {
   if (composed) return NextResponse.json({ ok: true, reply: composed.reply, model: "deterministic composer", provider: "deterministic", guardrailTripped: false, toolsUsed: composed.toolsUsed, verified: true });
 
   const status = await llmStatus();
-  if (status.provider === "none") return NextResponse.json({ ok: false, reason: "no-llm-available", nugen: status.nugen }, { status: 503 });
+  const offline = () => {
+    const o = offlineAnswer(message, snapshot);
+    return o ? NextResponse.json({ ok: true, reply: o.reply, model: "templates", provider: "offline-templates", guardrailTripped: false, toolsUsed: o.toolsUsed, verified: true }) : null;
+  };
+  if (status.provider === "none") {
+    return offline() ?? NextResponse.json({ ok: false, reason: "no-llm-available", nugen: status.nugen }, { status: 503 });
+  }
 
   // Live data is pre-fetched by deterministic routing and injected into the prompt, so any provider
   // (Nugen-aligned or Ollama) answers from facts instead of having to choose and call tools itself.
@@ -85,7 +92,7 @@ export async function POST(req: Request) {
     break;
   }
 
-  if (!finalContent) return NextResponse.json({ ok: false, reason: "no-response" }, { status: 502 });
+  if (!finalContent) return offline() ?? NextResponse.json({ ok: false, reason: "no-response" }, { status: 502 });
 
   // A model that answers with a raw tool-call blob instead of prose gets one nudge without tools.
   if (/^\s*\{\s*"name"\s*:/.test(finalContent)) {

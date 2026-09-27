@@ -18,6 +18,7 @@ Every external API and data source the system touches, what it is used for, and 
 | Mastodon `#goa` timeline | none | Posts filtered to weather-relevant content | Reachable |
 | Google Trends (unofficial) | none | Search-interest reading | Best-effort |
 | Telegram Bot API | bot token | Staff tasks and issue reports via long-polling (no public webhook) | Opt-in standalone process |
+| Hosted LLM (optional) | `ANTHROPIC_API_KEY`, or `HOSTED_LLM_BASE_URL` / `_API_KEY` / `_MODEL` | Cloud fallback where Ollama cannot run (e.g. Vercel); without any model the assistants answer from live data with templates | Optional; templates otherwise |
 | Ollama local REST | none, localhost | Fallback chat (`llama3.1:8b`) and embeddings (`nomic-embed-text`) for RAG | Opt-in; deterministic answers work when off |
 | TensorFlow.js COCO-SSD weights | none | Pretrained person/vehicle detector, downloaded once, run in the browser | Frames never leave the browser |
 | Web Speech API | browser | Voice in/out (English, Hindi, Marathi) | Text-only fallback |
@@ -30,6 +31,8 @@ Every external API and data source the system touches, what it is used for, and 
 | `/api/social-weather-signals` | GET | Fans out to the seven public sources; items, hazards, trend score, per-source flags |
 | `/api/guest-app/inbox` | POST · GET · PATCH | Bridge: the guest app submits, the admin browser drains and acknowledges |
 | `/api/telegram/inbox` | GET · POST | Queue between the Telegram bot and the live simulation (exactly-once apply) |
+| `/api/signal-intel` | POST | Traveller-impact classification of posts (Nugen-aligned model, rules fallback) |
+| `/api/scenario-parse` | POST | Plain-English scenario to bounded what-if parameters |
 | `/api/ops-assistant` · `/api/concierge` | GET · POST | Assistants: composers → Nugen-aligned model → Ollama fallback; GET reports the provider |
 | `/api/auth/login` · `logout` · `session` | POST · POST · GET | Salted-hash sign-in and server-verified role |
 | `/api/actions` · `/api/snapshots` | GET · POST | SQLite audit log and state snapshots |

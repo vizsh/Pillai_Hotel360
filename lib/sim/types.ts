@@ -1,4 +1,5 @@
 import type { Vec3 } from "@/lib/architecture/types";
+import type { WeatherLearnState } from "@/lib/intelligence/weatherLearner";
 
 export type RoomStatus = "vacant-clean" | "vacant-dirty" | "cleaning" | "occupied" | "vip" | "ooo";
 
@@ -283,6 +284,10 @@ export interface ChatMessage {
 export type Scenario = "peak-season" | "monsoon-lull" | "conference-block" | "equipment-crisis" | "vip-arrival";
 
 export interface SimState {
+  /** Twin calibration (lib/intelligence/weatherLearner.ts): learned weather-response belief, the simulator's hidden ground-truth sensitivity, and whether this state runs the twin's belief (what-if projections) or reality. */
+  wxLearn?: WeatherLearnState;
+  wxWorldSens?: number;
+  wxUseBelief?: boolean;
   seed: number;
   scenario: Scenario;
   t: number;

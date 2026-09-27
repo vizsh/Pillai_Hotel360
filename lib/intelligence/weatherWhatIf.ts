@@ -4,6 +4,7 @@ import { tick } from "@/lib/sim/engine";
 import { solveRoster } from "./staffing";
 import type { WeatherCondition, WeatherDay } from "./weather";
 import { weatherDemandProfile } from "./weatherImpact";
+import { beliefSlope } from "./weatherLearner";
 
 /** The Digital Twin's actual "what if this weather happens" mechanism: HackCelestial's own
  * midnight-task brief asks for a system that can "simulate what-if and counterfactual
@@ -91,6 +92,7 @@ function openFnbConciergeCount(state: SimState): number {
 
 function runHorizon(state: SimState, model: ResortModel, seed: number, weather: WeatherDay | null): SimState {
   const clone: SimState = structuredClone(state);
+  clone.wxUseBelief = true; // projections run the twin's learned belief, not the property's hidden truth
   clone.seed = seed; // forces engine.ts's ensureRand to reseed its shared RNG for this clone
   const steps = Math.round((HORIZON_HOURS * 60) / TICK_MINUTES);
   for (let i = 0; i < steps; i++) tick(clone, model, TICK_MINUTES, weather ?? undefined);
@@ -100,7 +102,7 @@ function runHorizon(state: SimState, model: ResortModel, seed: number, weather: 
 export function runWeatherWhatIf(state: SimState, model: ResortModel, scenario: WeatherScenarioInput): WeatherWhatIfResult {
   const clearDay: WeatherDay = { dayOffset: 0, condition: "clear", tempC: 27, rainProbability: 0.1 };
   const scenarioDay: WeatherDay = { dayOffset: 0, ...scenario };
-  const profile = weatherDemandProfile(scenarioDay);
+  const profile = weatherDemandProfile(scenarioDay, { fnbSlope: beliefSlope(state) });
 
   const occ: number[] = [];
   const fnb: number[] = [];
@@ -147,4 +149,18 @@ export function runWeatherWhatIf(state: SimState, model: ResortModel, scenario: 
     openFnbConciergeRequestsDelta: band(reqs),
     zoneMultiplier: profile.zoneMultiplier as Record<string, number>,
   };
+}
+
+/** Data assimilation: feed the twin one day of "real" wet-weather observations. Runs a clone of the property's
+ * REAL dynamics (hidden true sensitivity) under a rainy day and merges what it observed into the live
+ * calibration, so the twin's belief tightens toward reality. The live simulation state is otherwise untouched. */
+export function assimilateWetDay(state: SimState, model: ResortModel, rainProbability = 0.85): { observations: number } {
+  const clone: SimState = structuredClone(state);
+  clone.wxUseBelief = false;
+  clone.seed = (state.seed ^ 0x51ed5) + (state.wxLearn?.n ?? 0) * 7919 + 13;
+  const before = clone.wxLearn?.n ?? 0;
+  const day: WeatherDay = { dayOffset: 0, condition: "rain", tempC: 27, rainProbability };
+  for (let i = 0; i < 96; i++) tick(clone, model, 15, day);
+  state.wxLearn = clone.wxLearn;
+  return { observations: (clone.wxLearn?.n ?? 0) - before };
 }

@@ -3,6 +3,7 @@ import type { SimState } from "@/lib/sim/types";
 import { ROLES, type Role } from "@/lib/rbac";
 import { forecastWeather, weatherSource } from "@/lib/intelligence/weather";
 import { weatherDemandProfile } from "@/lib/intelligence/weatherImpact";
+import { beliefSlope, calibrationSummary } from "@/lib/intelligence/weatherLearner";
 import { computePricing } from "@/lib/intelligence/pricing";
 import { getSocialSignals, getHazardEvents, getTrendScore, getSignalSources, socialSignalsSource, publicConcernScore } from "@/lib/intelligence/socialSignals";
 import type { WeatherWhatIfResult } from "@/lib/intelligence/weatherWhatIf";
@@ -114,7 +115,7 @@ export interface OpsSnapshot {
     projectedOccupancy: number;
     elasticity: number;
   };
-  weather: { source: "live" | "simulated"; days: OpsWeatherDay[] };
+  weather: { source: "live" | "simulated"; days: OpsWeatherDay[]; calibration?: { priorSlope: number; learnedSlope: number; learnedSd: number; observations: number; improvementPct: number | null } };
   signals: {
     source: "live" | "none";
     concernScore: number;
@@ -190,7 +191,7 @@ export function buildOpsSnapshot(state: SimState, model: ResortModel, role: Role
   const roomsAll = Object.values(state.rooms);
   const pricing = computePricing(state, model);
   const weatherDays: OpsWeatherDay[] = forecastWeather(state).map((d) => {
-    const prof = weatherDemandProfile(d);
+    const prof = weatherDemandProfile(d, { fnbSlope: beliefSlope(state) });
     return { dayOffset: d.dayOffset, condition: d.condition, tempC: d.tempC, rainProbability: d.rainProbability, narrative: prof.narrative, fnbSpendMultiplier: prof.fnbSpendMultiplier, daytimePresenceBump: prof.daytimePresenceBump, zoneMultiplier: prof.zoneMultiplier as Record<string, number> };
   });
   const assets: OpsAsset[] = model.assets
@@ -221,7 +222,14 @@ export function buildOpsSnapshot(state: SimState, model: ResortModel, role: Role
       projectedOccupancy: pricing.projectedOccupancy,
       elasticity: pricing.inputs.elasticity,
     },
-    weather: { source: weatherSource(), days: weatherDays },
+    weather: {
+      source: weatherSource(),
+      days: weatherDays,
+      calibration: (() => {
+        const c = calibrationSummary(state);
+        return { priorSlope: c.priorSlope, learnedSlope: c.learned.mean, learnedSd: c.learned.sd, observations: c.learned.n, improvementPct: c.improvementPct };
+      })(),
+    },
     signals: {
       source: socialSignalsSource(),
       concernScore: publicConcernScore(),

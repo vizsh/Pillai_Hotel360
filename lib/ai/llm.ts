@@ -4,8 +4,11 @@ import { chatRaw as ollamaChatRaw, ollamaStatus, embed, OLLAMA_CHAT_MODEL, type 
  *   1. Nugen — the domain-ALIGNED model (base model -> Nugen alignment -> domain model), used whenever
  *      NUGEN_API_KEY and NUGEN_MODEL_ID are set (scripts/nugen/align.ts writes both into .env.local).
  *   2. Ollama — local fallback (llama3.1:8b), used when Nugen is unconfigured, unreachable or errors.
+ *   3. Hosted — optional cloud fallback for deployments where Ollama cannot run (Vercel etc.): Anthropic when
+ *      ANTHROPIC_API_KEY is set, or any OpenAI-compatible endpoint via HOSTED_LLM_BASE_URL / _API_KEY / _MODEL.
+ *      With none of these reachable the assistants fall back to templated answers from live data (no model).
  * Each call reports which provider actually answered, so the UI can say so honestly. */
-export type Provider = "nugen" | "ollama";
+export type Provider = "nugen" | "ollama" | "hosted";
 
 const NUGEN_BASE = process.env.NUGEN_BASE_URL ?? "https://api.nugen.in";
 const NUGEN_TIMEOUT_MS = 45000;
@@ -69,17 +72,60 @@ async function nugenChat(messages: ChatTurn[], tools?: readonly unknown[]): Prom
   }
 }
 
-/** Chat with tool support. Nugen first (if configured), Ollama as the automatic fallback. */
+export const hostedConfigured = () => Boolean(process.env.ANTHROPIC_API_KEY || (process.env.HOSTED_LLM_API_KEY && process.env.HOSTED_LLM_MODEL));
+export const hostedLabel = () => (process.env.ANTHROPIC_API_KEY ? (process.env.HOSTED_LLM_MODEL ?? "claude-haiku-4-5-20251001") : (process.env.HOSTED_LLM_MODEL ?? ""));
+let hostedDownUntil = 0;
+
+/** Plain text-in/text-out cloud fallback (no tool calling: routing pre-fetches the data anyway). */
+async function hostedChat(messages: ChatTurn[]): Promise<LlmResult | null> {
+  if (!hostedConfigured() || Date.now() < hostedDownUntil) return null;
+  const system = messages.filter((m) => m.role === "system").map((m) => m.content).join("\n\n");
+  const convo = toNugenMessages(messages.filter((m) => m.role !== "system"));
+  try {
+    if (process.env.ANTHROPIC_API_KEY) {
+      const model = hostedLabel();
+      const res = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-api-key": process.env.ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01" },
+        body: JSON.stringify({ model, max_tokens: 900, temperature: 0.2, system, messages: convo.length ? convo : [{ role: "user", content: "Hello" }] }),
+        signal: AbortSignal.timeout(30000),
+      });
+      if (!res.ok) throw new Error(String(res.status));
+      const data = (await res.json()) as { content?: { text?: string }[] };
+      const content = data.content?.[0]?.text?.trim();
+      return content ? { content, provider: "hosted", model } : null;
+    }
+    const base = (process.env.HOSTED_LLM_BASE_URL ?? "https://api.openai.com/v1").replace(/\/$/, "");
+    const model = process.env.HOSTED_LLM_MODEL!;
+    const res = await fetch(`${base}/chat/completions`, {
+      method: "POST",
+      headers: { "content-type": "application/json", Authorization: `Bearer ${process.env.HOSTED_LLM_API_KEY}` },
+      body: JSON.stringify({ model, temperature: 0.2, max_tokens: 900, messages: [{ role: "system", content: system }, ...convo] }),
+      signal: AbortSignal.timeout(30000),
+    });
+    if (!res.ok) throw new Error(String(res.status));
+    const data = (await res.json()) as { choices?: { message?: { content?: string } }[] };
+    const content = data.choices?.[0]?.message?.content?.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
+    return content ? { content, provider: "hosted", model } : null;
+  } catch {
+    hostedDownUntil = Date.now() + NUGEN_STATUS_TTL_MS;
+    return null;
+  }
+}
+
+/** Chat with tool support. Nugen first, Ollama as the automatic fallback, then the optional hosted model. */
 export async function llmChat(messages: ChatTurn[], tools?: readonly unknown[]): Promise<LlmResult | null> {
   const viaNugen = await nugenChat(messages, tools);
   if (viaNugen) return viaNugen;
   const viaOllama = await ollamaChatRaw(messages, tools);
-  return viaOllama ? { ...viaOllama, provider: "ollama", model: OLLAMA_CHAT_MODEL } : null;
+  if (viaOllama) return { ...viaOllama, provider: "ollama", model: OLLAMA_CHAT_MODEL };
+  return hostedChat(messages);
 }
 
 export interface LlmStatus extends OllamaStatus {
   /** What will answer the next message: nugen if configured, else ollama, else none. */
   provider: Provider | "none";
+  hosted: { configured: boolean; model: string | null };
   nugen: { configured: boolean; modelId: string | null; reachable: boolean | null };
   fallback: { provider: "ollama"; model: string; ready: boolean };
 }
@@ -107,9 +153,10 @@ export async function llmStatus(): Promise<LlmStatus> {
   const nugenUsable = nugenOk === true && Date.now() >= nugenDownUntil;
   return {
     ...ollama,
-    reachable: ollama.reachable || nugenUsable,
-    chatModelPulled: ollama.chatModelPulled || nugenUsable,
-    provider: nugenUsable ? "nugen" : ollamaReady ? "ollama" : "none",
+    reachable: ollama.reachable || nugenUsable || hostedConfigured(),
+    chatModelPulled: ollama.chatModelPulled || nugenUsable || hostedConfigured(),
+    provider: nugenUsable ? "nugen" : ollamaReady ? "ollama" : hostedConfigured() ? "hosted" : "none",
+    hosted: { configured: hostedConfigured(), model: hostedConfigured() ? hostedLabel() : null },
     nugen: { configured: nugenConfigured(), modelId: nugenConfigured() ? nugenModelId() : null, reachable: nugenOk },
     fallback: { provider: "ollama", model: OLLAMA_CHAT_MODEL, ready: ollamaReady },
   };

@@ -17,7 +17,7 @@ import { Button, Provenance } from "@/components/ui/primitives";
 import { Markdown } from "@/components/ui/Markdown";
 import { cn } from "@/lib/utils";
 
-type OllamaStatus = { reachable: boolean; chatModelPulled: boolean; embedModelPulled: boolean; models: string[]; provider?: "nugen" | "ollama" | "none"; nugen?: { configured: boolean; modelId: string | null; reachable: boolean | null }; fallback?: { model: string; ready: boolean } };
+type OllamaStatus = { reachable: boolean; chatModelPulled: boolean; embedModelPulled: boolean; models: string[]; provider?: "nugen" | "ollama" | "hosted" | "none"; nugen?: { configured: boolean; modelId: string | null; reachable: boolean | null }; fallback?: { model: string; ready: boolean } };
 
 interface AssistantMessage {
   id: string;
@@ -140,7 +140,7 @@ export function AssistantPage() {
     scroller.current?.scrollTo({ top: scroller.current.scrollHeight, behavior: "smooth" });
   }, [messages.length, thinking]);
 
-  const aiReady = ollama?.reachable && ollama.chatModelPulled;
+  const aiReady = ollama !== null; // with no model reachable the assistant still answers from live data using templates
 
   const send = (msg: string) => {
     const trimmed = msg.trim();
@@ -228,13 +228,9 @@ export function AssistantPage() {
             <span className={cn("h-2 w-2 rounded-full", ollama === null ? "bg-low" : aiReady ? "bg-positive" : "bg-critical")} />
             {ollama === null ? (
               <span className="text-[12px] text-low">Checking Ollama…</span>
-            ) : !ollama.reachable ? (
+            ) : ollama.provider === "none" || (!ollama.reachable && !ollama.chatModelPulled) ? (
               <span className="text-[12px] text-mid">
-                Ollama not reachable — run <code className="mono text-accent">ollama serve</code>.
-              </span>
-            ) : !ollama.chatModelPulled ? (
-              <span className="text-[12px] text-mid">
-                No chat model pulled — run <code className="mono text-accent">ollama pull llama3.1:8b</code>.
+                No language model reachable (Nugen, Ollama or hosted) — answering from live data with templates; exact-maths, weather and equipment answers are unaffected.
               </span>
             ) : (
               <span className="text-[12px] text-mid">
@@ -330,7 +326,7 @@ export function AssistantPage() {
             value={text}
             onChange={(e) => setText(e.target.value)}
             disabled={!aiReady}
-            placeholder={aiReady ? `Ask in ${LANGUAGE_LABELS[language]}…` : "Ollama not connected"}
+            placeholder={aiReady ? `Ask in ${LANGUAGE_LABELS[language]}…` : "Checking assistant…"}
             className="h-9 flex-1 rounded-md border border-stroke bg-transparent px-3 text-[12.5px] text-hi outline-none placeholder:text-low focus:border-accent/60 disabled:opacity-50"
           />
           <Button type="submit" size="icon" variant="primary" aria-label="Send" disabled={!aiReady}>

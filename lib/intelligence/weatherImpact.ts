@@ -15,6 +15,8 @@ import type { WeatherCondition, WeatherDay } from "./weather";
  * mechanic invented for this task. */
 export interface WeatherDemandProfile {
   condition: WeatherCondition;
+  /** Rain severity in [0.2, 1] on a rain day, 0 otherwise — the regressor the twin learns its F&B slope against. */
+  rainSeverity: number;
   /** Added to pickRequestType's request-category weights (lib/sim/text.ts) — positive raises
    * that category's share of organic guest requests today, negative lowers it. */
   requestBias: { fnb: number; concierge: number; amenity: number };
@@ -36,6 +38,7 @@ export interface WeatherDemandProfile {
 
 const NEUTRAL: WeatherDemandProfile = {
   condition: "clear",
+  rainSeverity: 0,
   requestBias: { fnb: 0, concierge: 0, amenity: 0 },
   fnbSpendMultiplier: 1,
   daytimePresenceBump: 0,
@@ -46,13 +49,15 @@ const NEUTRAL: WeatherDemandProfile = {
 /** rainProbability and tempC scale each condition's severity within its own band (a 55%-chance
  * drizzle nudges demand less than a 95%-chance downpour) rather than treating every "rain" day
  * identically — a coarse but real severity signal, not a fixed step function. */
-export function weatherDemandProfile(day: Pick<WeatherDay, "condition" | "tempC" | "rainProbability">): WeatherDemandProfile {
+export function weatherDemandProfile(day: Pick<WeatherDay, "condition" | "tempC" | "rainProbability">, opts: { fnbSlope?: number } = {}): WeatherDemandProfile {
+  const fnbSlope = opts.fnbSlope ?? 0.35;
   if (day.condition === "rain") {
     const severity = Math.max(0.2, day.rainProbability); // floor so a "rain" day never reads as a no-op
     return {
       condition: "rain",
+      rainSeverity: severity,
       requestBias: { fnb: 0.14 * severity, concierge: -0.07 * severity, amenity: -0.03 * severity },
-      fnbSpendMultiplier: 1 + 0.35 * severity,
+      fnbSpendMultiplier: 1 + fnbSlope * severity,
       daytimePresenceBump: 0.28 * severity,
       zoneMultiplier: { restaurant: 1 + 0.3 * severity, bar: 1 + 0.2 * severity, spa: 1 + 0.15 * severity, "pool-deck": 1 - 0.55 * severity, "sky-bar": 1 - 0.5 * severity, gym: 1 + 0.1 * severity },
       narrative: `Rain (${(day.rainProbability * 100).toFixed(0)}% probability): outdoor/pool-side demand drops, indoor F&B and spa pick it up, guests stay in-room through the day.`,
@@ -62,6 +67,7 @@ export function weatherDemandProfile(day: Pick<WeatherDay, "condition" | "tempC"
     const severity = Math.max(0.3, Math.min(1, (day.tempC - 34) / 6));
     return {
       condition: "heatwave",
+      rainSeverity: 0,
       requestBias: { fnb: 0.06 * severity, concierge: -0.03 * severity, amenity: 0 },
       fnbSpendMultiplier: 1 + 0.15 * severity,
       daytimePresenceBump: 0.32 * severity,

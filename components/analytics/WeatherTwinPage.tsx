@@ -8,6 +8,10 @@ import { AnalyticsShell, Card } from "./AnalyticsShell";
 import { WeatherTwinPanel } from "@/components/command/WeatherTwinPanel";
 import { WeatherImpactMap } from "./WeatherImpactMap";
 import { SocialSignalFeed } from "./SocialSignalFeed";
+import { CascadeGraph } from "./CascadeGraph";
+import { CalibrationCard } from "./CalibrationCard";
+import { beliefSlope } from "@/lib/intelligence/weatherLearner";
+import type { WeatherScenarioInput, WeatherWhatIfResult } from "@/lib/intelligence/weatherWhatIf";
 import { cn } from "@/lib/utils";
 
 // Leaflet touches `window`/`document` at import time, so it must never be part of the server
@@ -37,6 +41,7 @@ export function WeatherTwinPage() {
   const today = forecast[0];
 
   const [zoneMultiplier, setZoneMultiplier] = useState<Record<string, number>>({});
+  const [whatIf, setWhatIf] = useState<{ scenario: WeatherScenarioInput; result: WeatherWhatIfResult } | null>(null);
   const [conditionLabel, setConditionLabel] = useState("Clear skies — no weather-driven demand shift.");
 
   return (
@@ -59,7 +64,7 @@ export function WeatherTwinPage() {
       <RegionalWeatherMap />
 
       <div className="grid grid-cols-2 gap-4">
-        <WeatherTwinPanel onResult={(_scenario, zm, narrative) => { setZoneMultiplier(zm); setConditionLabel(narrative); }} />
+        <WeatherTwinPanel onResult={(scenario, zm, narrative, result) => { setZoneMultiplier(zm); setConditionLabel(narrative); setWhatIf({ scenario, result }); }} />
         <div className="flex flex-col gap-4">
           <Card title="Geospatial impact map (property zones)">
             <WeatherImpactMap zoneMultiplier={zoneMultiplier} conditionLabel={conditionLabel} />
@@ -67,6 +72,9 @@ export function WeatherTwinPage() {
           <SocialSignalFeed />
         </div>
       </div>
+
+      {whatIf && <CascadeGraph scenario={whatIf.scenario} result={whatIf.result} fnbSlope={beliefSlope(state)} />}
+      <CalibrationCard />
 
       <p className="text-[10.5px] leading-relaxed text-low">
         Today&rsquo;s actual simulated weather ({today.condition}, {today.tempC}°C) is already shaping the live dashboard&rsquo;s own numbers on every other page — this page&rsquo;s what-if panel runs a separate, cloned projection to compare scenarios without touching that real state.

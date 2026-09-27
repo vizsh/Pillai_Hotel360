@@ -320,6 +320,11 @@ export function seedState(model: ResortModel, seed: number, scenario: Scenario):
   reviews.sort((a, b) => a.createdAt - b.createdAt);
   return {
     seed,
+    wxWorldSens: (() => {
+      // Hidden true sensitivity, always clearly different from the prior (0.55-0.75x or 1.35-1.6x) so learning is observable.
+      const h = (k: number) => ((Math.sin(seed * k + 1.7) * 43758.5453) % 1 + 1) % 1;
+      return h(12.9898) < 0.5 ? 0.55 + 0.2 * h(78.233) : 1.35 + 0.25 * h(78.233);
+    })(),
     scenario,
     t,
     day0: t,

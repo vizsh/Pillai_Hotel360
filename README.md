@@ -41,8 +41,8 @@ Every recommendation carries the *measured inputs* that produced it (a Weibull h
 |---|---|---|
 | **12 decision modules** | Predictive maintenance (Weibull), dynamic pricing (elasticity), staffing (greedy + swap), inventory (Holt/EOQ), sentiment, segmentation (k-means), personalization, concierge, guest relocation, energy, group blocks, in-stay recovery | [`lib/intelligence`](lib/intelligence) · [math](docs/INTELLIGENCE_MODELS.md) |
 | **3 composite views** | Causal chain, 14-day demand spine, Guest Experience Index | `lib/intelligence` |
-| **Weather-aware digital twin** | Live forecast drives the simulation; paired Monte Carlo what-if on the *real* tick engine; regional map with radar and hazard events | [`/weather-twin`](app/weather-twin) · [docs](docs/WEATHER_AND_SIGNALS.md) |
-| **Public-signal intelligence** | 7 live sources (NewsAPI, GNews, Reddit, Bluesky, Mastodon, GDACS, Google Trends) → 0–1 public-concern score | [`app/api/social-weather-signals`](app/api/social-weather-signals) |
+| **Weather-aware digital twin** | Live forecast drives the simulation; paired Monte Carlo what-if on the *real* tick engine; **online Bayesian calibration** (the twin keeps learning); **cascade graph** of 1st/2nd/3rd-order effects; plain-English scenarios; regional map with radar and hazard events | [`/weather-twin`](app/weather-twin) · [docs](docs/WEATHER_AND_SIGNALS.md) |
+| **Public-signal intelligence** | 7 live sources → concern score, plus **traveller-impact reading** of each post (cancellation, disruption, flooding, safety…) by the Nugen-aligned model with a rules fallback | [`app/api/social-weather-signals`](app/api/social-weather-signals) |
 | **CCTV vision layer** | Fire, altercation/distress, parking occupancy — real in-browser detection over bundled test clips, persistence-gated | [`lib/vision`](lib/vision) · [docs](docs/SURVEILLANCE.md) |
 | **AI assistants** | Ops Assistant + guest Concierge on a **Nugen-aligned model with automatic Ollama fallback**; exact-maths composers; grounding gate | [`lib/ai`](lib/ai) · [docs](docs/AI_ASSISTANTS.md) |
 | **Automation** | Autopilot (same `accept()` as a manual click), 15 narrated scenarios, emergency response, Telegram staff bot | [docs](docs/AUTOMATION_AND_INTEGRATIONS.md) |
@@ -117,6 +117,8 @@ npm run nugen:align       # upload → benchmark → align base model → deploy
 npm run nugen:status      # progress + account models
 npm run nugen:chat        # base vs aligned answers, side by side
 ```
+
+The same aligned model does four jobs — Ops Assistant, guest Concierge, reading public posts for the weather twin, and turning plain-English scenarios into what-if parameters. With no model reachable at all (a deployment without Ollama or a key), the assistants still answer from live data with templates.
 
 At runtime **both assistants** (staff Ops Assistant and the guest Concierge) share one provider chain — Nugen-aligned model first, local Ollama automatically on any error, and the guest Concierge has a final offline answer — and every reply shows which provider produced it.
 

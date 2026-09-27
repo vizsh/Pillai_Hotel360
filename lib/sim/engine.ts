@@ -12,7 +12,8 @@ import { runModules } from "@/lib/intelligence/registry";
 import { FATIGUE_BASE_ACCRUAL, FATIGUE_OVERLOAD_ACCRUAL, FATIGUE_RECOVERY_RATE, STANDARD_ROOMS_PER_HK_SHIFT } from "@/lib/intelligence/staffing";
 import { forecastWeather, type WeatherDay } from "@/lib/intelligence/weather";
 import { weatherDemandProfile } from "@/lib/intelligence/weatherImpact";
-import { publicConcernScore } from "@/lib/intelligence/socialSignals";
+import { PRIOR_SLOPE, beliefSlope, observe } from "@/lib/intelligence/weatherLearner";
+import { publicConcernScore, disruptionScore } from "@/lib/intelligence/socialSignals";
 
 let counter = 1;
 let rand: Rand = mulberry32(1);
@@ -242,7 +243,12 @@ export function tick(state: SimState, model: ResortModel, dtMin: number, weather
   // only the forecast *card* used forecastWeather(); the tick itself read the seeded-only
   // weatherForDay() directly and could never actually be moved by real weather.
   const todayWeather = weatherOverride ?? forecastWeather(state)[0];
-  const weatherProfile = weatherDemandProfile(todayWeather);
+  // Reality ticks respond with the property's hidden true sensitivity; the twin's projections (what-if clones
+  // flagged wxUseBelief) respond with what the twin has LEARNED so far, so better calibration means better forecasts.
+  const fnbSlope = state.wxUseBelief ? beliefSlope(state) : PRIOR_SLOPE * (state.wxWorldSens ?? 1);
+  const weatherProfile = weatherDemandProfile(todayWeather, { fnbSlope });
+  let fnbObservedSum = 0;
+  let fnbGuestCount = 0;
 
   if (prevClock.h !== now.h) {
     const shift = shiftFor(now.h);
@@ -309,7 +315,7 @@ export function tick(state: SimState, model: ResortModel, dtMin: number, weather
   // hit-rate, not a calibrated model, and shouldn't be allowed to dominate the weather-driven
   // effect it's layered on top of.
   const concern = publicConcernScore();
-  const requestBias = { maintenance: maintBias, ...weatherProfile.requestBias, concierge: (weatherProfile.requestBias.concierge ?? 0) - 0.06 * concern, complaint: 0.04 * concern };
+  const requestBias = { maintenance: maintBias, ...weatherProfile.requestBias, concierge: (weatherProfile.requestBias.concierge ?? 0) - 0.06 * concern, complaint: 0.04 * concern + 0.03 * disruptionScore() };
   for (const r of rooms) {
     if (!r.guestId) continue;
     if (rand() < 0.05 * dtH * (now.hour > 7 && now.hour < 23 ? 1 : 0.15)) {
@@ -482,11 +488,19 @@ export function tick(state: SimState, model: ResortModel, dtMin: number, weather
     g.sentiment = clamp(g.sentiment + drift, -1, 1);
     const fnbTick = (randRange(rand, 0, 1) < 0.5 ? 0 : randRange(rand, 40, 260) * dtH) * weatherProfile.fnbSpendMultiplier;
     g.spendFnb += fnbTick;
+    fnbObservedSum += fnbTick;
+    fnbGuestCount += 1;
     state.kpis.organicAncillaryToday += fnbTick;
     state.rooms[g.roomId].sentiment = g.sentiment;
     if (g.sentiment < -0.45 && rand() < 0.02 * dtH && !state.alerts[`sent-${g.id}`]) {
       addAlert(state, { id: `sent-${g.id}`, severity: "warn", kind: "sentiment", targetKind: "room", targetId: g.roomId, title: `At-risk guest · ${model.roomById.get(g.roomId)!.number}`, body: `${g.name} sentiment ${g.sentiment.toFixed(2)}. ${g.loyalty !== "none" ? `${g.loyalty} member.` : ""} Service recovery recommended.` });
     }
+  }
+
+  // Data assimilation: on a wet tick of the real property (not a belief projection), record how much the
+  // in-house guests actually spent versus a clear-weather expectation (E[spend] = 0.5 x 150 x dt per guest).
+  if (!state.wxUseBelief && weatherProfile.rainSeverity > 0 && fnbGuestCount >= 5) {
+    observe(state, weatherProfile.rainSeverity, fnbObservedSum / (fnbGuestCount * 75 * dtH) - 1);
   }
 
   const occFactor = occupied / Math.max(1, totalRooms * 0.85);

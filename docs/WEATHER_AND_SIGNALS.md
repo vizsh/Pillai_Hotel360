@@ -41,7 +41,32 @@ feedback into the sim: concierge request bias −0.06 × concern, complaint bias
 
 An official source outweighs an anonymous post (weight 2). It is a coarse keyword-and-hazard blend, not a trained classifier, and its influence is a small nudge. The assistants also compute each hazard's **distance from the resort** — a hazard beyond ~500 km is reported as monitoring only.
 
-## 4 · Regional map
+## 4 · The twin keeps learning (Bayesian calibration) — [`lib/intelligence/weatherLearner.ts`](../lib/intelligence/weatherLearner.ts)
+
+The weather-response model is not a fixed constant. The slope linking rain severity to indoor F&B spend starts from a documented prior (0.35 ± 0.15) and is updated online by conjugate normal regression from what the simulated property actually spends on wet ticks — data assimilation:
+
+```
+y = β·x + ε          x = rain severity, y = observed F&B spend ratio − 1
+precision = 1/prior_sd² + Sxx/σ²        mean = (prior_mean/prior_sd² + Sxy/σ²) / precision
+```
+
+σ is estimated online from residuals. The simulator holds a **hidden true sensitivity** (seeded, 0.55–0.75× or 1.35–1.6× the prior, so learning is observable) that the twin does not know, so recovery can be verified; the Calibration card on `/weather-twin` plots the posterior mean with a 95 % band tightening as evidence arrives, against the prior and the truth. Reality ticks use the hidden truth; **what-if projections, the outlook and the assistants use the learned belief** (`wxUseBelief` on cloned states), so better calibration means better forecasts. "Assimilate a wet day" replays 96 observations from the property's real dynamics into the live twin.
+
+![Twin calibration: the learned belief converges to the simulator truth](assets/twin-calibration.png)
+
+## 5 · Cascade graph — [`components/analytics/CascadeGraph.tsx`](../components/analytics/CascadeGraph.tsx)
+
+The what-if's effects ordered as a causal chain — trigger → first-order (outdoor demand falls, indoor F&B rises, guests stay in) → second-order (F&B/concierge requests, room energy) → third-order (unmet staffing, HVAC failure risk). Values are the Monte Carlo medians with P10…P90; arrow weight is signal-to-noise, and a **dashed node means the band includes zero**, so the twin declines to claim that effect.
+
+![Cascade of effects](assets/cascade-graph.png)
+
+## 6 · Reading the posts — traveller-impact intelligence — [`lib/ai/signalIntel.ts`](../lib/ai/signalIntel.ts)
+
+Beyond a keyword score, each post or headline is classified into an intent (cancellation, delay-disruption, flooding, safety-warning, advisory, demand-shift, positive, irrelevant) with urgency and place — by the **Nugen-aligned model** when available (`POST /api/signal-intel`, cached 30 min), with a transparent rule-based classifier as fallback and gap-filler. The urgency-weighted **disruption score** nudges the simulation's complaint and front-desk load. A plain-English scenario box (`POST /api/scenario-parse`, e.g. "a severe cyclone with 95% rain") converts text to what-if parameters, clamped before the simulator sees them.
+
+![Traveller-impact reading of live posts](assets/signal-intel.png)
+
+## 7 · Regional map
 
 Leaflet with an OpenStreetMap base, RainViewer live radar (capped at native zoom 7), GDACS events at reported coordinates, regional airports, city and beaches, and an impact ripple paced by the current condition. If radar is unreachable the map keeps its base layer.
 

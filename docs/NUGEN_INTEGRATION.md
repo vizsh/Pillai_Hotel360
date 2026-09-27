@@ -65,7 +65,11 @@ Implementation:
 - **Guest side** (companion app, separate repo) — `lib/llm.ts` in [`SDP42/guestexperience`](https://github.com/SDP42/guestexperience): Nugen → Ollama → optional Anthropic → offline extractive answer; the answer trace shows the provider.
 - **Visibility** — `GET /api/ops-assistant` and `GET /api/concierge` report `provider: "nugen" | "ollama" | "none"`, and the UI badge reads "Nugen-aligned" or "Ollama (fallback)".
 
-## 4. Why this design
+## 4. One aligned model, four jobs
+
+The same Nugen provider chain serves: (1) the **Ops Assistant**, (2) the guest **Concierge**, (3) **traveller-impact reading** of public posts for the weather twin (`/api/signal-intel`), and (4) **plain-English scenario parsing** for the what-if (`/api/scenario-parse`). Every consumer falls back to Ollama, then an optional hosted model, then a deterministic path — the assistants answer from live data with templates when no model is reachable ([`lib/ai/offlineAnswer.ts`](../lib/ai/offlineAnswer.ts)), so a deployment without a model never goes dark.
+
+## 5. Why this design
 
 - **Domain fluency** — the model learns this system's vocabulary (Weibull hazard, elasticity, TRevPAR, persistence gating) and answer style.
 - **Trust** — numbers come from code, not the model. Alignment improves language; composers and the grounding gate protect figures. See [AI_ASSISTANTS.md](AI_ASSISTANTS.md).
@@ -73,7 +77,7 @@ Implementation:
 - **One model, two audiences** — the same aligned model serves operations and guests, each steered by its own style guide and data.
 - **Privacy** — only the data a question needs is sent; deterministic answers never leave the machine.
 
-## 5. Tests
+## 6. Tests
 
 `tests/ai/llm.test.ts` verifies, with a mocked transport: Nugen is used when configured and reported as the provider; requests hit `/api/v3/inference/chat/completions` with the Bearer key and aligned model id; tool calls whose arguments arrive as JSON strings are parsed; tool results are folded into user turns. The fallback path was verified against a local Ollama and a mock Nugen server that rejects a wrong key.
 

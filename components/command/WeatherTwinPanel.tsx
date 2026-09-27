@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { CloudRain, Sun, Thermometer, X } from "lucide-react";
 import { useSim } from "@/store/sim";
 import { getModel } from "@/lib/architecture/model";
-import { runWeatherWhatIf, type WeatherScenarioInput, type MetricBand } from "@/lib/intelligence/weatherWhatIf";
+import { runWeatherWhatIf, type WeatherScenarioInput, type MetricBand, type WeatherWhatIfResult } from "@/lib/intelligence/weatherWhatIf";
 import { fmtINR, cn } from "@/lib/utils";
 import { Provenance } from "@/components/ui/primitives";
 
@@ -45,19 +45,40 @@ function DeltaRow({ label, sub, band, fmt, unit, betterIsHigher }: { label: stri
   );
 }
 
-export function WeatherTwinPanel({ onResult, onClose }: { onResult?: (scenario: WeatherScenarioInput, zoneMultiplier: Record<string, number>, conditionLabel: string) => void; onClose?: () => void }) {
+export function WeatherTwinPanel({ onResult, onClose }: { onResult?: (scenario: WeatherScenarioInput, zoneMultiplier: Record<string, number>, conditionLabel: string, result: WeatherWhatIfResult) => void; onClose?: () => void }) {
   const { state } = useSim();
   useSim((s) => s.version);
   const model = getModel();
 
   const [preset, setPreset] = useState(1);
   const [draft, setDraft] = useState<WeatherScenarioInput>(PRESETS[1].scenario);
+  const [nl, setNl] = useState("");
+  const [nlBusy, setNlBusy] = useState(false);
+  const [nlNote, setNlNote] = useState<string | null>(null);
   const [committed, setCommitted] = useState<WeatherScenarioInput>(PRESETS[1].scenario);
   // Derived, not stateful: `committed` is only ever reassigned to the exact `draft` object the
   // debounce below was scheduled from, so once it lands they're the same reference and this
   // goes false on its own — no separate "computing" state to keep in sync (and no setState
   // inside an effect body or a useMemo, which is what the two lines this replaced did).
   const computing = draft !== committed;
+
+  const applyText = async () => {
+    if (!nl.trim() || nlBusy) return;
+    setNlBusy(true);
+    try {
+      const res = await fetch("/api/scenario-parse", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: nl }) });
+      const data = (await res.json()) as { ok: boolean; scenario?: { condition: WeatherScenarioInput["condition"]; tempC: number; rainProbability: number; note: string }; provider?: string };
+      if (data.ok && data.scenario) {
+        setPreset(-1);
+        setDraft({ condition: data.scenario.condition, tempC: data.scenario.tempC, rainProbability: data.scenario.rainProbability });
+        setNlNote(`${data.scenario.note} — read by ${data.provider === "nugen" ? "the Nugen-aligned model" : data.provider === "ollama" ? "Ollama (fallback)" : data.provider === "hosted" ? "a hosted model" : "the rule-based parser"}`);
+      }
+    } catch {
+      setNlNote("Could not read that scenario — try the sliders.");
+    } finally {
+      setNlBusy(false);
+    }
+  };
 
   useEffect(() => {
     const id = setTimeout(() => setCommitted(draft), 450);
@@ -67,7 +88,7 @@ export function WeatherTwinPanel({ onResult, onClose }: { onResult?: (scenario: 
   const result = useMemo(() => runWeatherWhatIf(state, model, committed), [state, model, committed]);
 
   useEffect(() => {
-    onResult?.(committed, result.zoneMultiplier, result.narrative);
+    onResult?.(committed, result.zoneMultiplier, result.narrative, result);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [result]);
 
@@ -87,6 +108,23 @@ export function WeatherTwinPanel({ onResult, onClose }: { onResult?: (scenario: 
       <p className="text-[11px] leading-relaxed text-mid">
         Fast-forwards {result.horizonHours}h of the real simulation ({result.runs} independent runs) under this weather versus an otherwise-identical clear day, and reports the difference — not a formula, the actual production tick engine run twice.
       </p>
+
+      <div className="flex flex-col gap-1">
+        <div className="flex gap-1.5">
+          <input
+            value={nl}
+            onChange={(e) => setNl(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && void applyText()}
+            placeholder="Describe a scenario, e.g. “a severe cyclone with 95% rain”"
+            className="h-8 flex-1 rounded-md border border-stroke bg-transparent px-2 text-[11px] text-hi outline-none placeholder:text-low focus:border-[#f5a524]/60"
+            aria-label="Describe a weather scenario in plain English"
+          />
+          <button onClick={() => void applyText()} disabled={nlBusy || !nl.trim()} className="rounded-md border border-[#f5a524]/50 bg-[#f5a524]/10 px-2.5 text-[10.5px] text-[#f5a524] disabled:opacity-40">
+            {nlBusy ? "Reading…" : "Apply"}
+          </button>
+        </div>
+        {nlNote && <span className="mono text-[9.5px] text-low">{nlNote}</span>}
+      </div>
 
       <div className="flex gap-1.5">
         {PRESETS.map((p, i) => (

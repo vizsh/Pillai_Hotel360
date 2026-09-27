@@ -387,6 +387,9 @@ export function executeTool(call: ToolCall, snapshot: OpsSnapshot): unknown {
     case "get_weather_outlook":
       return {
         source: snapshot.weather.source === "live" ? "live Open-Meteo forecast" : "simulated seeded forecast (Open-Meteo not reachable)",
+        twinCalibration: snapshot.weather.calibration
+          ? { rainToFnbSlope: { prior: snapshot.weather.calibration.priorSlope, learned: round2(snapshot.weather.calibration.learnedSlope), plusMinus95: round2(1.96 * snapshot.weather.calibration.learnedSd) }, observations: snapshot.weather.calibration.observations, note: "the twin re-learns this from wet-tick observations; multipliers below already use the learned value" }
+          : undefined,
         days: snapshot.weather.days.map((d) => ({
           dayOffset: d.dayOffset,
           condition: d.condition,

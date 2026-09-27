@@ -1,5 +1,6 @@
 import { clamp } from "@/lib/utils";
 import type { SocialSignalItem, HazardEvent } from "@/app/api/social-weather-signals/route";
+import { disruptionScoreOf, type SignalAnalysis } from "@/lib/ai/signalIntel";
 
 /** Same adapter-seam shape as lib/intelligence/weather.ts's live weather (globalThis rather than
  * a module-level `let`, for the identical reason documented there — Next's client/server module
@@ -8,6 +9,9 @@ import type { SocialSignalItem, HazardEvent } from "@/app/api/social-weather-sig
  * reads it back. */
 declare global {
   var __socialSignals: { items: SocialSignalItem[]; hazards: HazardEvent[]; trendScore: number | null; sources: Record<string, boolean>; fetchedAt: number } | null | undefined;
+}
+declare global {
+  var __signalAnalysis: { byId: Record<string, SignalAnalysis>; provider: string; model: string } | null | undefined;
 }
 const STALE_MS = 3 * 60 * 60 * 1000;
 
@@ -58,4 +62,19 @@ export function publicConcernScore(): number {
   const totalWeight = weights.keyword + (hazards.length ? weights.hazard : 0) + (trend !== null ? weights.trend : 0);
   if (totalWeight === 0) return 0;
   return clamp((keywordScore * weights.keyword + hazardScore * weights.hazard + trendScoreNorm * weights.trend) / totalWeight, 0, 1);
+}
+
+export function setSignalAnalysis(payload: { analysis: Record<string, SignalAnalysis>; provider: string; model: string } | null) {
+  globalThis.__signalAnalysis = payload ? { byId: payload.analysis, provider: payload.provider, model: payload.model } : null;
+}
+
+export function getSignalAnalysis(): { byId: Record<string, SignalAnalysis>; provider: string; model: string } | null {
+  return socialSignalsSource() === "live" ? (globalThis.__signalAnalysis ?? null) : null;
+}
+
+/** 0-1: urgency-weighted share of live posts describing real traveller disruption (cancellations, delays,
+ * flooding, safety) — read by the simulation as a small extra nudge toward complaints and front-desk load. */
+export function disruptionScore(): number {
+  const a = getSignalAnalysis();
+  return a ? disruptionScoreOf(Object.values(a.byId)) : 0;
 }
