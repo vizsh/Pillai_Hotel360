@@ -1,10 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { MapContainer, TileLayer, Marker, Popup, Circle, CircleMarker } from "react-leaflet";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { MapContainer, TileLayer, Marker, Popup, Circle, CircleMarker, ZoomControl, useMap } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
-import { Radar, ShieldAlert } from "lucide-react";
+import { Radar, ShieldAlert, Pause, Play } from "lucide-react";
+import { NewsWeatherOverlay, IR_LEGEND, TEMP_LEGEND, type NewsLayer } from "./NewsWeatherOverlay";
+import { useSim } from "@/store/sim";
+import { useWeatherWhatIf } from "@/store/weatherWhatIf";
+import { forecastWeather } from "@/lib/intelligence/weather";
 import { getHazardEvents } from "@/lib/intelligence/socialSignals";
 import { useCurrentWeatherCondition } from "@/hooks/useCurrentWeatherCondition";
 import { cn } from "@/lib/utils";
@@ -68,6 +72,18 @@ function useRadarTiles() {
   return urlTemplate;
 }
 
+function ViewController({ wide }: { wide: boolean }) {
+  const map = useMap();
+  useEffect(() => {
+    const id = setTimeout(() => {
+      map.invalidateSize();
+      map.setView(wide ? [16.4, 74.6] : RESORT, wide ? 6.5 : 8, { animate: true });
+    }, 60);
+    return () => clearTimeout(id);
+  }, [wide, map]);
+  return null;
+}
+
 function Ripples({ color }: { color: string }) {
   const [phase, setPhase] = useState(0);
   useEffect(() => {
@@ -89,10 +105,43 @@ function Ripples({ color }: { color: string }) {
 
 export function RegionalWeatherMap() {
   const radarUrl = useRadarTiles();
-  const [showRadar, setShowRadar] = useState(true);
+  const [layer, setLayer] = useState<"radar" | NewsLayer>("ir");
+  const showRadar = layer === "radar";
+  const [playing, setPlaying] = useState(true);
+  const [hour, setHour] = useState(0);
+  const phase = useRef(0);
+  const wifActive = useWeatherWhatIf((st) => st.active);
+  const wifScenario = useWeatherWhatIf((st) => st.scenario);
+  const simState = useSim((st) => st.state);
+  const today = forecastWeather(simState)[0];
+  const scenarioTemp = wifActive ? wifScenario.tempC : today.tempC;
+  const scenarioRain = wifActive ? wifScenario.rainProbability : today.rainProbability;
   const hazards = getHazardEvents();
   const condition = useCurrentWeatherCondition();
   const tint = CONDITION_TINT[condition] ?? CONDITION_TINT.clear;
+  const severity = condition === "rain" ? Math.max(0.55, scenarioRain) : condition === "heatwave" ? 0.25 : 0.4;
+  useEffect(() => {
+    let raf = 0;
+    const t0 = performance.now();
+    const base = phase.current;
+    const loop = (now: number) => {
+      if (playing) {
+        phase.current = (base + (now - t0) / 42000) % 1;
+        const nh = Math.round(phase.current * 24);
+        setHour((h) => (nh === h ? h : nh));
+      }
+      raf = requestAnimationFrame(loop);
+    };
+    raf = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(raf);
+  }, [playing]);
+  const stamp = hour === 0 ? "NOW" : `+${hour} h`;
+  const layers: { id: "radar" | NewsLayer; label: string }[] = [
+    { id: "ir", label: "Satellite IR" },
+    { id: "temp", label: "Temperature" },
+    { id: "fronts", label: "Fronts & systems" },
+    { id: "radar", label: "Live radar" },
+  ];
   const nearbyHazards = useMemo(() => hazards.filter((h) => Math.abs(h.lat - RESORT[0]) < 12 && Math.abs(h.lon - RESORT[1]) < 12), [hazards]);
 
   return (
@@ -103,25 +152,32 @@ export function RegionalWeatherMap() {
           <span className="font-display text-[14.5px] font-semibold text-hi">Regional Weather Map</span>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={() => setShowRadar((v) => !v)} className={cn("mono rounded px-2 py-0.5 text-[9.5px] uppercase tracking-wider transition-colors", showRadar ? "bg-sky-500/20 text-sky-300" : "bg-white/5 text-low")}>
-            Radar {showRadar ? "on" : "off"}
-          </button>
+          <div className="flex overflow-hidden rounded-md border border-stroke">
+            {layers.map((l) => (
+              <button key={l.id} onClick={() => setLayer(l.id)} className={cn("mono px-2 py-1 text-[9.5px] uppercase tracking-wider transition-colors", layer === l.id ? "bg-sky-500/25 text-sky-200" : "bg-white/[0.03] text-low hover:text-hi")}>
+                {l.label}
+              </button>
+            ))}
+          </div>
           <span className="mono flex items-center gap-1 rounded bg-positive/15 px-1.5 py-0.5 text-[9.5px] uppercase tracking-wider text-positive">
-            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-positive" /> live
+            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-positive" /> {layer === "radar" ? "live" : "demo model"}
           </span>
         </div>
       </div>
 
-      <div className="relative h-[420px] w-full">
-        <MapContainer center={RESORT} zoom={8} scrollWheelZoom={false} style={{ height: "100%", width: "100%", background: "#05070a" }}>
-          <TileLayer attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' url="https://tile.openstreetmap.org/{z}/{x}/{y}.png" className="map-dark-filter" />
+      <div className={cn("relative w-full transition-[height]", layer === "radar" ? "h-[420px]" : "h-[560px]")}>
+        <MapContainer center={[16.4, 74.6]} zoom={6.5} zoomSnap={0.5} zoomControl={false} scrollWheelZoom={false} style={{ height: "100%", width: "100%", background: "#05070a" }}>
+          <TileLayer attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' url="https://tile.openstreetmap.org/{z}/{x}/{y}.png" className={layer === "ir" ? "map-ir-filter" : layer === "temp" ? "map-temp-filter" : "map-dark-filter"} />
           {/* RainViewer's own docs: radar tiles only exist up to zoom 7 — maxNativeZoom makes
               Leaflet request the real z7 tile and scale it up at deeper zooms instead of
               requesting an out-of-range tile, which RainViewer serves as a literal
               "Zoom Level Not Supported" placeholder image (confirmed by fetching one directly). */}
           {showRadar && radarUrl && <TileLayer url={radarUrl} opacity={0.55} maxNativeZoom={7} />}
 
-          <Ripples color={tint} />
+          <ZoomControl position="topright" />
+          <ViewController wide={layer !== "radar"} />
+          {layer === "radar" && <Ripples color={tint} />}
+          {layer !== "radar" && <NewsWeatherOverlay layer={layer} severity={severity} baseTemp={scenarioTemp} phase={phase} label={condition} />}
 
           <CircleMarker center={RESORT} radius={9} pathOptions={{ color: tint, weight: 2, fillColor: tint, fillOpacity: 0.85 }} />
           <Marker position={RESORT} icon={RESORT_ICON}>
@@ -159,7 +215,28 @@ export function RegionalWeatherMap() {
           ))}
         </MapContainer>
 
-        <div className="pointer-events-none absolute bottom-2 left-2 flex flex-col gap-1 rounded-lg border border-stroke bg-black/70 px-2.5 py-2 backdrop-blur-sm">
+        {layer !== "radar" && (
+          <>
+            <div className="pointer-events-none absolute left-3 top-3 z-[500] flex flex-col gap-0.5 rounded-md border-l-4 border-[#f5a524] bg-black/80 px-3 py-1.5 shadow-lg">
+              <span className="text-[13px] font-extrabold uppercase tracking-wide text-white">{layer === "ir" ? "Satellite · cloud tops" : layer === "temp" ? "Temperatures (°C)" : "Weather systems"}</span>
+              <span className="mono text-[9.5px] uppercase tracking-wider text-[#f5a524]">Konkan coast · {condition === "rain" ? "storm scenario" : condition === "heatwave" ? "heatwave scenario" : "fair-weather scenario"} · {stamp}</span>
+            </div>
+            {layer !== "fronts" && (
+              <div className="pointer-events-none absolute right-16 top-3 z-[500] w-44 rounded-md bg-black/75 px-2 py-1.5">
+                <div className="h-2.5 rounded-sm" style={{ background: layer === "ir" ? IR_LEGEND : TEMP_LEGEND }} />
+                <div className="mono mt-1 flex justify-between text-[8.5px] text-mid">
+                  {layer === "ir" ? (<><span>clear</span><span>cloud</span><span>deep convection</span></>) : (<><span>18°</span><span>31°</span><span>44°</span></>)}
+                </div>
+              </div>
+            )}
+            <div className="absolute inset-x-3 bottom-2 z-[500] flex items-center gap-2 rounded-md bg-black/75 px-2.5 py-1.5">
+              <button onClick={() => setPlaying((p) => !p)} className="grid h-6 w-6 place-items-center rounded bg-white/10 text-hi" aria-label={playing ? "Pause" : "Play"}>{playing ? <Pause size={12} /> : <Play size={12} />}</button>
+              <input type="range" min={0} max={24} value={hour} onChange={(e) => { setPlaying(false); phase.current = Number(e.target.value) / 24; setHour(Number(e.target.value)); }} className="h-1 flex-1 accent-[#f5a524]" aria-label="Forecast hour" />
+              <span className="mono w-14 text-right text-[10px] text-[#f5a524]">{stamp}</span>
+            </div>
+          </>
+        )}
+        <div className={cn("pointer-events-none absolute left-2 flex flex-col gap-1 rounded-lg border border-stroke bg-black/70 px-2.5 py-2 backdrop-blur-sm", layer === "radar" ? "bottom-2" : "hidden")}>
           <span className="mono text-[9px] uppercase tracking-wider text-low">Legend</span>
           <span className="flex items-center gap-1.5 text-[10px] text-mid">🏨 Resort (epicentre)</span>
           <span className="flex items-center gap-1.5 text-[10px] text-mid">✈️ 🏙️ 🏖️ Regional entities</span>
@@ -178,6 +255,8 @@ export function RegionalWeatherMap() {
            own headers). A CSS filter turns the ordinary light tiles dark to match the rest of
            this dashboard, instead of depending on a specific provider's own dark style staying
            free indefinitely. */
+        .map-ir-filter { filter: grayscale(1) brightness(0.62) contrast(1.15); }
+        .map-temp-filter { filter: grayscale(1) brightness(0.7) contrast(1.1); }
         .map-dark-filter { filter: invert(1) hue-rotate(180deg) brightness(0.92) contrast(0.9) saturate(0.7); }
       `}</style>
     </div>

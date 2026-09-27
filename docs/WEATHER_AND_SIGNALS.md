@@ -68,6 +68,12 @@ Beyond a keyword score, each post or headline is classified into an intent (canc
 
 ## 7 · Regional map
 
+Four switchable layers: **Satellite IR** (cloud-top colour ramp), **Temperature** (field plus city readouts), **Fronts & systems** (L/H centres, cold and warm fronts, rain zones) and **Live radar** (RainViewer). The first three are a seeded, animated *demonstration model* — a low-pressure system drifting onto the Konkan coast, sized and tinted by the current scenario and temperature, with a play/scrub timeline — and are labelled "demo model"; only the radar layer is live. Code: `components/analytics/NewsWeatherOverlay.tsx`.
+
+![Satellite IR layer](assets/map-ir.png)
+
+![Fronts and systems layer](assets/map-fronts.png)
+
 Leaflet with an OpenStreetMap base, RainViewer live radar (capped at native zoom 7), GDACS events at reported coordinates, regional airports, city and beaches, and an impact ripple paced by the current condition. If radar is unreachable the map keeps its base layer.
 
 ## Files
