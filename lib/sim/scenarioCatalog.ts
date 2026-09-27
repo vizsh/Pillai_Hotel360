@@ -4,6 +4,7 @@ import { injectScenario } from "@/lib/sim/actions";
 import { refreshRecommendations, tick } from "@/lib/sim/engine";
 import { statusFor } from "@/lib/intelligence/maintenance";
 import { nextBestActions } from "@/lib/intelligence/personalization";
+import { resetSocialHistory, recordDisruptionSample, setSocialSignals, setSignalAnalysis } from "@/lib/intelligence/socialSignals";
 
 /** "Automation Scenarios" — a curated, explain-then-run catalog for demonstrating full
  * detect → decide → act loops, one module at a time, distinct from the generic Autopilot
@@ -105,6 +106,41 @@ export function triggerPersonalizationVip(state: SimState, model: ResortModel): 
     g.prefs = prevPrefs;
   }
   return null;
+}
+
+/** Forces the exact real fields lib/intelligence/socialTrigger.ts's own gate reads — a low,
+ * flat disruption baseline built the same way the live 20-minute poll would over a few hours,
+ * then one genuinely elevated, officially-corroborated sample — through the SAME setSocialSignals
+ * / setSignalAnalysis / recordDisruptionSample functions the real poll hook calls, not a
+ * separate fake path. refreshRecommendations() then either finds a real burst + corroboration
+ * (and the module fires for real) or it doesn't — nothing here scripts the outcome. Every post
+ * title and the hazard event are labelled "(seeded for demo)" so this is never mistaken for a
+ * real live event were someone to click through to the source. */
+export function triggerSocialSignalEvent(state: SimState, model: ResortModel): boolean {
+  resetSocialHistory();
+  setSocialSignals(null);
+  setSignalAnalysis(null);
+  for (let i = 0; i < 4; i++) recordDisruptionSample(); // flat, quiet baseline — same shape 4 real polls would leave
+
+  setSocialSignals({
+    items: [],
+    hazards: [{ id: "demo-tc-1", name: "Tropical Cyclone (seeded for demo)", eventType: "TC", alertLevel: "Orange", lat: 15.6, lon: 73.9, url: "https://www.gdacs.org", fromDate: new Date().toISOString().slice(0, 10), provider: "gdacs" }],
+    trendScore: null,
+    sources: { gdacs: true },
+  });
+  setSignalAnalysis({
+    provider: "rules",
+    model: "",
+    analysis: {
+      "demo-1": { intent: "safety-warning", urgency: 0.92, location: "Goa", summary: "Cyclone warning issued for the Konkan coast (seeded for demo)", by: "rules" },
+      "demo-2": { intent: "flooding", urgency: 0.86, location: "Goa", summary: "Waterlogging reported near coastal roads (seeded for demo)", by: "rules" },
+      "demo-3": { intent: "cancellation", urgency: 0.75, location: "Goa", summary: "Ferry and flight operators warn of cancellations (seeded for demo)", by: "rules" },
+    },
+  });
+  recordDisruptionSample(); // the one sample that actually spikes vs. the flat baseline above
+
+  refreshRecommendations(state, model);
+  return !!state.recommendations["rec-social-trigger"];
 }
 
 export function isPhysicalScenario(kind: ScenarioKind): boolean {
@@ -252,6 +288,16 @@ export const SCENARIOS: ScenarioDef[] = [
     detection: "A weighted keyword-intent classifier scores the message against department-tagged keyword sets, with urgency detection for language like 'now' or 'urgent' escalating the SLA automatically.",
     reasoning: "Classifying and dispatching immediately beats waiting for a human to read the chat log — especially for complaint-flavored language, where every extra minute of silence is what turns a fixable problem into a bad review.",
     kind: "guest-message",
+  },
+  {
+    id: "social-signal-trigger",
+    title: "Public signal predicts a weather event before the forecast confirms it",
+    module: "weather",
+    situation: "A burst of public posts and news about severe weather near the resort turns out to be corroborated by an independent official hazard agency — before the routine forecast poll would have caught up.",
+    detection: "The disruption score must genuinely rise versus its own recent baseline (a real burst, not just 'currently elevated') AND at least one independent official agency (GDACS or NASA EONET) must report a matching event — the same two-factor discipline the CCTV persistence gate uses, applied to public chatter instead of pixels.",
+    reasoning: "Social reports can lead an official forecast update by hours; corroborated early warning buys the property lead time to run the weather playbook before staffing and occupancy decisions are already locked in.",
+    kind: "recommendation",
+    match: (r) => r.id === "rec-social-trigger",
   },
   {
     id: "guest-app-order",

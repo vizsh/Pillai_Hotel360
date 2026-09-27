@@ -16,6 +16,7 @@ import {
   triggerSoftMaintenanceIssue,
   triggerAssetFailure,
   triggerPersonalizationVip,
+  triggerSocialSignalEvent,
   tickForwardStep,
   pickOccupiedRoom,
   isPhysicalScenario,
@@ -267,6 +268,18 @@ export function AutomationScenariosPanel() {
     if (stale()) return;
 
     let rec = findMatch(useSim.getState().state, s);
+    if (!rec && s.id === "social-signal-trigger") {
+      let fired = false;
+      mutate((st) => {
+        fired = triggerSocialSignalEvent(st, model);
+      });
+      if (fired) {
+        append(`Public-signal poll: disruption score burst, corroborated by an independent official hazard agency — gate cleared`);
+        await sleep(800);
+        if (stale()) return;
+      }
+      rec = findMatch(useSim.getState().state, s);
+    }
     if (!rec && s.id === "personalization-vip") {
       let guestId: string | null = null;
       mutate((st) => {
